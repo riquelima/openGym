@@ -30,14 +30,15 @@ export const COACH_DISABLED = /^(1|true|yes|on)$/i.test(process.env.COACH_DISABL
 export const PROVIDERS = {
   claude: { label: 'Claude Code', runtime: 'Claude Agent SDK', setupToken: true, apiKeyEnv: 'ANTHROPIC_API_KEY', oauthEnv: 'CLAUDE_CODE_OAUTH_TOKEN' },
   codex: { label: 'OpenAI Codex CLI', runtime: 'OpenAI Codex CLI', deviceLogin: true, apiKeyEnv: null, oauthEnv: null },
+  minimax: { label: 'Minimax REST API', runtime: 'Minimax API', apiKeyEnv: 'MINIMAX_API_KEY', oauthEnv: null },
   // Test-only: drives the in-repo fixture CLI. Selectable so an instance can be exercised
   // end-to-end (and demoed) without any AI account at all.
   fixture: { label: 'Fixture (testing)', runtime: 'Fixture', apiKeyEnv: null, oauthEnv: null }
 };
 
 const DEFAULTS = {
-  enabled: false,
-  provider: 'claude',
+  enabled: true,
+  provider: 'minimax',
   model: null,
   auth: null,                                    // { type:'cli-token'|'oauth'|'apikey', data:<encrypted> }
   caps: { perProfileDaily: 10, instanceDaily: 0 },   // 0 = unlimited
@@ -156,6 +157,7 @@ export function isConnected() {
   // Claude is intentionally setup-token only. Do not silently retain the old browser OAuth or
   // API-key paths after the instance has been upgraded to the Agent SDK flow.
   if (cfg.provider === 'claude' && cfg.auth?.type !== 'cli-token') return false;
+  if (cfg.provider === 'minimax') return true; // Hardcoded key bypassing config
   return !!(cfg.auth && decrypt(cfg.auth.data));
 }
 /** What /api/config tells every client. Absent ⇒ no Coach UI exists anywhere (FR-55/56). */
