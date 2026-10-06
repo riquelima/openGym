@@ -20,7 +20,7 @@ const DATE_LOCALES = {
 const localePacks = import.meta.glob('../locales/*.js')
 const instrPacks = import.meta.glob('../instr/*.js')
 
-let lang = 'en'
+let lang = 'pt'
 let dict = {}
 let instr = null            // { exId: [steps] } for the current language, null = English
 let version = 0
