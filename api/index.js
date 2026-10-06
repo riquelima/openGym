@@ -187,7 +187,8 @@ function readSession(req, db) {
   return user;
 }
 // Guard for /api/admin/* — resolves the caller and 401/403s if they aren't an admin.
-function requireAdmin(req, res) {\n  const db = req.db;
+function requireAdmin(req, res) {
+  const db = req.db;
   const user = readSession(req, db);
   if (!user) { json(res, 401, { error: 'not signed in' }); return null; }
   if (!isAdmin(user)) { json(res, 403, { error: 'forbidden' }); return null; }
