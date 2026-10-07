@@ -10,6 +10,7 @@ data/
 
 # Build output / deps
 frontend/dist/
+dist/
 node_modules/
 *.log
 .DS_Store
@@ -20,3 +21,4 @@ node_modules/
 CLAUDE.md
 AGENTS.md
 graphify-out/
+Best Skills/

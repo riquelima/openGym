@@ -9,8 +9,8 @@ import { registerCustom } from './exercises.js'
 
 // The two runtimes share no build step, so the client's copy of the fingerprint logic is
 // checked against the server's actual source rather than against a transcribed expectation.
-import * as serverPayload from '../../../api/coach/payload.js'
-import { hashPlan as serverHashPlan } from '../../../api/coach/jobs.js'
+import * as serverPayload from '../../api/coach/payload.js'
+import { hashPlan as serverHashPlan } from '../../api/coach/jobs.js'
 
 const state = (over = {}) => ({
   unit: 'kg', lang: 'en', customEx: [], workouts: [], bodyweight: [], exWeights: {}, dayPlan: {},

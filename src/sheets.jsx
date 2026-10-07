@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
 import { EXDB, EXIDX, BODYPARTS, isCardio, allExercises, equipmentOf } from './lib/exercises.js'
+import { searchExerciseDB } from './lib/exercisedb-api.js'
 import { fmtDate, fmtNum, fmtVol, fmtDur, durPart, todayISO, uid, exCount, DAYN, MONTHS_LONG, ACCENTS } from './lib/format.js'
 import { lastEntryFor, bestWeightFor, buildSets, effectiveRoutineId, workoutVolume, setsDone, setsDoneActive, lastBW, supersetUnits, unitOf, setLabel, defaultConfig, cleanupSg, modeOf, effortOf } from './lib/history.js'
 import { beep, vibrate } from './lib/sound.js'
@@ -284,15 +285,57 @@ function ExerciseDetail({ ex, close }) {
   const st = useStore(s => s.S)
   const last = lastEntryFor(st, ex.id)
   const best = bestWeightFor(st, ex.id)
+  const isVideo = !!ex.video || !!ex.videoUrl
   return <>
-    <h3 className="capitalize">{ex.n}</h3>
+    <div className="row between" style={{ alignItems: 'center', marginBottom: 8 }}>
+      <h3 className="capitalize" style={{ margin: 0, flex: 1, fontSize: 20 }}>{ex.n}</h3>
+    </div>
     <Media ex={ex} />
     <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '10px 0' }}>
       <span className="tag acc">{t(ex.bp)}</span>
       {ex.tg && <span className="tag"><Icon name="target" />{t(ex.tg)}</span>}
       <span className="tag"><Icon name="dumbbell" />{t(ex.eq)}</span>
-      {(ex.sm || []).slice(0, 3).map((s, i) => <span key={i} className="tag">{t(s)}</span>)}
+      {(ex.sm || []).slice(0, 4).map((s, i) => <span key={i} className="tag">{t(s)}</span>)}
+      {ex.source === 'exercisedb' && (
+        <span className="tag" style={{ borderColor: 'var(--acc)', color: 'var(--acc)' }}>
+          <Icon name="cloud" style={{ fontSize: 12 }} /> ExerciseDB
+        </span>
+      )}
     </div>
+
+    {ex.overview && (
+      <div className="card ex-overview" style={{ margin: '10px 0', padding: '12px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="row" style={{ gap: 6, marginBottom: 5, fontWeight: 600, fontSize: 13, color: 'var(--acc)' }}>
+          <Icon name="info" style={{ fontSize: 14 }} /> {t('Overview')}
+        </div>
+        <div className="small" style={{ lineHeight: 1.5, opacity: 0.9 }}>{ex.overview}</div>
+      </div>
+    )}
+
+    {((ex.tips && ex.tips.length > 0) || (ex.exerciseTips && ex.exerciseTips.length > 0)) && (
+      <div className="card ex-tips" style={{ margin: '10px 0', padding: '12px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="row" style={{ gap: 6, marginBottom: 6, fontWeight: 600, fontSize: 13, color: 'var(--yellow, #f59e0b)' }}>
+          <Icon name="lightbulb" style={{ fontSize: 14 }} /> {t('Coaching Tips')}
+        </div>
+        <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.5 }}>
+          {(ex.tips || ex.exerciseTips).map((tip, idx) => (
+            <li key={idx} style={{ marginBottom: 4 }}>{tip}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    {ex.variations && ex.variations.length > 0 && (
+      <div style={{ margin: '10px 0' }}>
+        <div className="muted small" style={{ marginBottom: 6, fontWeight: 600 }}>{t('Variations')}</div>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {ex.variations.map((v, idx) => (
+            <span key={idx} className="chip" style={{ fontSize: 12, padding: '4px 10px' }}>{v}</span>
+          ))}
+        </div>
+      </div>
+    )}
+
     {ex.desc && <div className="exnote">{ex.desc}</div>}
     {best > 0 && <div className="small row" style={{ marginBottom: 6, gap: 5 }}><Icon name="trophy" style={{ fontSize: 14, color: 'var(--yellow)' }} />{t('Best:')} <b className="accent">{fmtNum(best)} {st.unit}</b>{last ? ` · ${t('last')} ${fmtDate(last.d)}: ${last.sets.map(s => setLabel(ex.id, s, last.target)).join(', ')}` : ''}</div>}
     <Button variant="primary" icon="plus" style={{ margin: '10px 0 4px' }} onClick={() => addToRoutineSheet(ex)}>{t('Add to my plan')}</Button>
@@ -415,42 +458,133 @@ function ExercisePicker({ onPick, close }) {
   const [bp, setBp] = useState('')          // '' = all, '★' = chosen, else a body part
   const [eq, setEq] = useState('')          // '' = any equipment
   const [shown, setShown] = useState(50)
-  const ql = q.toLowerCase().trim()
+  const [list, setList] = useState([])
+  const [loading, setLoading] = useState(false)
+
   const all = allExercises(st)
-  let base = all.filter(e =>
-    (bp === '★' ? usage[e.id] : (!bp || e.bp === bp)) &&
-    (!ql || e.n.toLowerCase().includes(ql) || e.tg.includes(ql) || e.eq.includes(ql) || (e.desc || '').toLowerCase().includes(ql)))
-  if (bp === '★') base = [...base].sort((a, b) => (usage[b.id] - usage[a.id]) || (a.n < b.n ? -1 : 1))
-  const eqOpts = equipmentOf(base)
-  // Drop the equipment filter if the search narrowed it away, so you never hit a dead end.
-  const eqOn = eqOpts.includes(eq) ? eq : ''
-  const f = eqOn ? base.filter(e => e.eq === eqOn) : base
+  const eqOpts = equipmentOf(all.filter(e => !bp || bp === '★' || e.bp === bp))
+  const eqOn = eq === 'gym' ? 'gym' : (eqOpts.includes(eq) ? eq : '')
   const chosenCount = Object.keys(usage).length
+
+  // Query unified ExerciseDB
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    const tm = setTimeout(async () => {
+      try {
+        const res = await searchExerciseDB(q, {
+          bodyPart: bp === '★' ? '' : bp,
+          equipment: eqOn,
+          limit: 120
+        })
+        if (active) {
+          let sorted = res
+          if (bp === '★') {
+            sorted = res.filter(e => usage[e.id]).sort((a, b) => (usage[b.id] - usage[a.id]) || (a.n < b.n ? -1 : 1))
+          }
+          setList(sorted)
+          setLoading(false)
+        }
+      } catch {
+        if (active) setLoading(false)
+      }
+    }, q ? 250 : 0)
+    return () => { active = false; clearTimeout(tm) }
+  }, [q, bp, eqOn])
+
+  const handlePick = ex => {
+    if (ex.source === 'exercisedb') {
+      update(s => {
+        s.customEx = s.customEx || []
+        if (!s.customEx.some(x => x.id === ex.id)) {
+          s.customEx.push(ex)
+        }
+      })
+    }
+    onPick(ex)
+  }
+
   return <>
-    <h3>{t('Add exercise')}</h3>
-    <div className="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-      <input className="input" placeholder={t('Search {0} exercises…', all.length)} value={q} onChange={e => { setQ(e.target.value); setShown(50) }} /></div>
+    <div className="row between" style={{ marginBottom: 10, alignItems: 'center' }}>
+      <h3 style={{ margin: 0 }}>{t('Add exercise')}</h3>
+      <span className="muted small" style={{ fontSize: 12 }}>ExerciseDB</span>
+    </div>
+
+    <div className="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+      <input
+        className="input"
+        placeholder={t('Buscar no ExerciseDB…')}
+        value={q}
+        onChange={e => { setQ(e.target.value); setShown(50) }}
+      />
+    </div>
+
     <div className="chips" style={{ margin: eqOpts.length > 1 ? '10px 0 6px' : '10px 0' }}>
-      {chosenCount > 0 && <button className={'chip' + (bp === '★' ? ' on' : '')} onClick={() => { setBp('★'); setEq(''); setShown(50) }}><Icon name="starFill" style={{ fontSize: 12, display: 'inline-block', marginRight: 4, verticalAlign: '-1px' }} />{t('Chosen')} ({chosenCount})</button>}
+      {chosenCount > 0 && (
+        <button className={'chip' + (bp === '★' ? ' on' : '')} onClick={() => { setBp('★'); setEq(''); setShown(50) }}>
+          <Icon name="starFill" style={{ fontSize: 12, display: 'inline-block', marginRight: 4, verticalAlign: '-1px' }} />
+          {t('Chosen')} ({chosenCount})
+        </button>
+      )}
       <button className={'chip nocap' + (!bp ? ' on' : '')} onClick={() => { setBp(''); setEq(''); setShown(50) }}>{t('All')}</button>
-      {BODYPARTS.map(b => <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setEq(''); setShown(50) }}>{t(b)}</button>)}
+      {BODYPARTS.map(b => (
+        <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setEq(''); setShown(50) }}>
+          {t(b)}
+        </button>
+      ))}
     </div>
-    {eqOpts.length > 1 && <div className="chips" style={{ marginBottom: 10 }}>
-      <button className={'chip nocap' + (!eqOn ? ' on' : '')} onClick={() => { setEq(''); setShown(50) }}>{t('Any equipment')}</button>
-      {eqOpts.map(x => <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(50) }}>{t(x)}</button>)}
-    </div>}
+
+    {(eqOpts.length > 0 || eq === 'gym') && (
+      <div className="chips" style={{ marginBottom: 10 }}>
+        <button className={'chip nocap' + (!eqOn ? ' on' : '')} onClick={() => { setEq(''); setShown(50) }}>{t('Any equipment')}</button>
+        <button className={'chip' + (eqOn === 'gym' ? ' on' : '')} onClick={() => { setEq(eqOn === 'gym' ? '' : 'gym'); setShown(50) }}>{t('Academia')}</button>
+        {eqOpts.map(x => <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(50) }}>{t(x)}</button>)}
+      </div>
+    )}
+
     <div className="list">
-      {bp !== '★' && <div className="item" onClick={() => customExSheet(null, ex => onPick(ex), q.trim())}>
-        <div className="thumb thumb-x"><Icon name="sparkles" /></div>
-        <div className="grow"><div className="tt">{t('Create your own exercise')}</div><div className="ss">{t('name + body part, no animation')}</div></div><Icon name="plus" className="chev" />
-      </div>}
-      {f.slice(0, shown).map(e => <div key={e.id} className="item" onClick={() => onPick(e)}>
-        <Thumb ex={e} /><div className="grow"><div className="tt capitalize">{e.n}</div><div className="ss capitalize">{t(e.tg || e.bp)} · {t(e.eq)}</div></div>
-        {usage[e.id] && <span className="tag acc"><Icon name="starFill" /></span>}<Icon name="plus" className="chev" />
-      </div>)}
-      {f.length === 0 && bp === '★' && <div className="empty">{t('Nothing chosen yet — add exercises and they’ll show up here.')}</div>}
+      {bp !== '★' && (
+        <div className="item" onClick={() => customExSheet(null, ex => handlePick(ex), q.trim())}>
+          <div className="thumb thumb-x"><Icon name="sparkles" /></div>
+          <div className="grow">
+            <div className="tt">{t('Create your own exercise')}</div>
+            <div className="ss">{t('name + body part, no animation')}</div>
+          </div>
+          <Icon name="plus" className="chev" />
+        </div>
+      )}
+
+      {loading && list.length === 0 ? (
+        <div className="empty"><div className="ico"><Icon name="cloud" /></div>{t('Searching ExerciseDB…')}</div>
+      ) : list.length > 0 ? (
+        list.slice(0, shown).map(e => (
+          <div key={e.id} className="item" onClick={() => handlePick(e)}>
+            <Thumb ex={e} />
+            <div className="grow">
+              <div className="tt capitalize">{e.n}</div>
+              <div className="ss capitalize">{t(e.tg || e.bp)} · {t(e.eq)}</div>
+            </div>
+            {usage[e.id] && <span className="tag acc"><Icon name="starFill" /></span>}
+            {e.video ? (
+              <span className="tag acc" style={{ fontSize: 11, padding: '2px 6px' }}>
+                <Icon name="video" style={{ fontSize: 11 }} />
+              </span>
+            ) : null}
+            <Icon name="plus" className="chev" />
+          </div>
+        ))
+      ) : (
+        <div className="empty">
+          <div className="ico"><Icon name="magnifier" /></div>
+          {bp === '★' ? t('Nothing chosen yet — add exercises and they’ll show up here.') : t('No exercise found in ExerciseDB.')}
+        </div>
+      )}
     </div>
-    {f.length > shown && <><div style={{ height: 8 }} /><Button onClick={() => setShown(s => s + 50)}>{t('Show more')}</Button></>}
+
+    {list.length > shown && (
+      <><div style={{ height: 8 }} /><Button onClick={() => setShown(s => s + 50)}>{t('Show more')}</Button></>
+    )}
   </>
 }
 export const exercisePicker = onPick => ui().openSheet(close => <ExercisePicker onPick={onPick} close={close} />)

@@ -15,6 +15,7 @@
 
 import { useRef, useState, useEffect, useCallback, forwardRef } from 'react'
 import Icon from './Icon.jsx'
+import { hapticLight, hapticMedium } from '../lib/haptics.js'
 
 /* ============================ text ============================ */
 
@@ -83,7 +84,7 @@ export function Switch({ checked, onChange, disabled }) {
       aria-checked={!!checked}
       disabled={disabled}
       className={'sw' + (checked ? ' on' : '')}
-      onClick={() => onChange(!checked)}
+      onClick={() => { hapticLight(); onChange(!checked) }}
     >
       <span className="knob" />
     </button>
@@ -103,7 +104,7 @@ export function Segmented({ options, value, onChange, className = '' }) {
           key={o.value}
           className={o.value === value ? 'on' : ''}
           aria-pressed={o.value === value}
-          onClick={() => onChange(o.value)}
+          onClick={() => { hapticLight(); onChange(o.value) }}
         >
           {o.icon && <Icon name={o.icon} />}
           {o.label && <span>{o.label}</span>}
@@ -116,7 +117,10 @@ export function Segmented({ options, value, onChange, className = '' }) {
 /* ============================ stepper ============================ */
 
 export function Stepper({ value, step = 1, onChange, decimal = true, className = '', label, unit }) {
-  const set = v => onChange(Math.max(0, Math.round((v || 0) * 100) / 100))
+  const set = v => {
+    hapticLight()
+    onChange(Math.max(0, Math.round((v || 0) * 100) / 100))
+  }
   const inner = (
     <div className={'stp ' + className}>
       <button onClick={() => set((+value || 0) - step)} aria-label="Decrease"><Icon name="minus" /></button>
@@ -203,7 +207,7 @@ export function Check({ checked, onChange, className = '', size }) {
       aria-checked={!!checked}
       className={'chk' + (checked ? ' on' : '') + ' ' + className}
       style={size ? { width: size, height: size } : null}
-      onClick={() => onChange(!checked)}
+      onClick={() => { hapticMedium(); onChange(!checked) }}
     >
       <Icon name="check" />
     </button>
@@ -285,9 +289,16 @@ function require_ui() {
 
 /* ============================ buttons ============================ */
 
-export function Button({ variant = 'plain', size, icon, trailingIcon, children, className = '', ...rest }) {
+export function Button({ variant = 'plain', size, icon, trailingIcon, children, className = '', onClick, ...rest }) {
   return (
-    <button className={`btn ${variant}${size ? ' ' + size : ''} ${className}`} {...rest}>
+    <button
+      className={`btn ${variant}${size ? ' ' + size : ''} ${className}`}
+      onClick={e => {
+        hapticLight()
+        onClick?.(e)
+      }}
+      {...rest}
+    >
       {icon && <Icon name={icon} />}
       {children && <span>{children}</span>}
       {trailingIcon && <Icon name={trailingIcon} />}

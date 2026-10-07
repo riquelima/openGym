@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useStore } from './store/useStore.js'
 import { useUI } from './store/useUI.js'
@@ -8,7 +8,7 @@ import { setLang, useLang } from './lib/i18n.js'
 import { setNav } from './lib/nav.js'
 import { useWakeLock } from './lib/wakelock.js'
 import { startFlow } from './sheets.jsx'
-import Icon from './components/Icon.jsx'
+import SplashScreen from './components/SplashScreen.jsx'
 import TabBar from './components/TabBar.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import Modals from './components/Modals.jsx'
@@ -44,26 +44,43 @@ function Shell() {
   const { S, user, ready } = useStore()
   const isGuest = useStore(s => s.isGuest())
   const langV = useLang()   // re-renders the whole shell when the language (pack) changes
+  const [showSplash, setShowSplash] = useState(true)
+
   useEffect(() => { setNav(navigate) }, [navigate])
   useEffect(() => { applyPrefs(S.theme, S.accent) }, [S.theme, S.accent])
   useEffect(() => { setLang(S.lang || 'pt') }, [S.lang])
   useEffect(() => { document.documentElement.lang = S.lang || 'pt' }, [langV, S.lang])
-  // every tab/route change starts at the top of the page
-  useEffect(() => { window.scrollTo(0, 0) }, [loc.pathname])
+
+  // every tab/route change starts at the top of the page with clean scroll
+  useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: 'instant' }) }, [loc.pathname])
+
+  // dynamic scroll position tracking for iOS sticky glass header styling
+  useEffect(() => {
+    const onScroll = () => {
+      const isScrolled = window.scrollY > 14
+      if (isScrolled !== document.body.classList.contains('is-scrolled')) {
+        document.body.classList.toggle('is-scrolled', isScrolled)
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   // bound to the workout, not to the route — checking Stats mid-session keeps the screen on
   useWakeLock(!!S.active && S.keepAwake !== false)
 
   const authed = user || isGuest
-  if (!ready && !authed) return (
-    <div id="app">
-      <div style={{ paddingTop: '44vh', display: 'flex', justifyContent: 'center', fontSize: 34, color: 'var(--label-3)' }}>
-        <Icon name="dumbbell" />
-      </div>
-    </div>
-  )
+
+  // When not authed and not ready, keep showing the animated splash screen rather than an empty screen
+  if (!ready && !authed) {
+    return <SplashScreen ready={ready} onFinish={() => setShowSplash(false)} />
+  }
 
   return (
     <>
+      {showSplash && (
+        <SplashScreen ready={ready} onFinish={() => setShowSplash(false)} />
+      )}
       {/* keyed on the route: a view that throws is contained, and switching tabs
           re-mounts the boundary, so the tab bar is always a way out */}
       <div id="app" className="vfade" key={loc.pathname}>

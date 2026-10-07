@@ -13,6 +13,7 @@ import { MOBILE, shareExport, syncReminder } from '../lib/mobile.js'
 import { loadStarterPlan, confirmSheet, importFromApp } from '../sheets.jsx'
 import { coachAvailable, hasConsent } from '../lib/coach.js'
 import { forgetCoach } from '../lib/coach-api.js'
+import { testExerciseDBConnection } from '../lib/exercisedb-api.js'
 import Icon from '../components/Icon.jsx'
 import { Section, Row, SelectRow, Switch, Segmented, Button, TextField } from '../components/ui.jsx'
 
@@ -26,6 +27,29 @@ export default function Settings() {
   const fileRef = useRef(null)
   const importRef = useRef(null)
   const wakeOK = wakeLockSupported()
+  const [apiKeyInput, setApiKeyInput] = useState(S.exercisedbApiKey || '')
+  const [testingKey, setTestingKey] = useState(false)
+
+  const saveAndTestKey = async () => {
+    const key = apiKeyInput.trim()
+    update(s => { s.exercisedbApiKey = key })
+    try {
+      localStorage.setItem('exercisedb_api_key', key)
+    } catch {}
+    if (!key) {
+      toast(t('Chave removida. Modo demonstração ativo.'))
+      return
+    }
+    setTestingKey(true)
+    try {
+      await testExerciseDBConnection(key)
+      toast(t('Conexão com ExerciseDB validada com sucesso!'))
+    } catch (err) {
+      toast(t('Erro: {0}', err.message))
+    } finally {
+      setTestingKey(false)
+    }
+  }
 
   const doExport = async () => {
     const json = JSON.stringify(S, null, 2)
@@ -152,6 +176,40 @@ export default function Settings() {
           accessory="chevron" onClick={() => nav('/coach')} />
       </Section>
     )}
+
+    {/* ---------- exercisedb api (11,000+ exercises & HD videos) ---------- */}
+    <Section
+      title="ExerciseDB API (11.000+ Exercícios)"
+      footer={t('Acesse 11.000+ exercícios com demonstrações em vídeo HD, biomecânica e variações. Obtenha sua chave gratuita em rapidapi.com/justin-WFnsXH_t6/api/exercisedb')}
+    >
+      <Row
+        icon="cloud"
+        iconTint="var(--acc)"
+        title={t('Base de Exercícios')}
+        subtitle={S.exercisedbApiKey ? t('Chave RapidAPI conectada (11.000+ exercícios ativos)') : t('Modo Demonstração (Exercícios em destaque com vídeo HD)')}
+      />
+      <div style={{ padding: '8px 16px 14px' }}>
+        <div className="small muted" style={{ marginBottom: 6 }}>{t('Chave RapidAPI (x-rapidapi-key)')}</div>
+        <div className="row" style={{ gap: 8 }}>
+          <input
+            type="password"
+            className="input"
+            style={{ flex: 1, fontFamily: 'monospace', fontSize: 13 }}
+            placeholder={t('Cole sua chave RapidAPI aqui…')}
+            value={apiKeyInput}
+            onChange={e => setApiKeyInput(e.target.value)}
+          />
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={saveAndTestKey}
+            disabled={testingKey}
+          >
+            {testingKey ? t('Testando…') : t('Salvar & Testar')}
+          </Button>
+        </div>
+      </div>
+    </Section>
 
     {(user || MOBILE) && <NotificationsCard S={S} update={update} toast={toast} />}
 
