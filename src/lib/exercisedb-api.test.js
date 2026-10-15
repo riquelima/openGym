@@ -4,7 +4,8 @@ import {
   FEATURED_EXERCISEDB_EXERCISES,
   searchExerciseDB,
   getExerciseDBKey,
-  isGymMachine
+  isGymMachine,
+  isGymEquipment
 } from './exercisedb-api.js'
 import { videoSrc, imgSrc, isExerciseDB, EXIDX } from './exercises.js'
 
@@ -77,7 +78,7 @@ describe('ExerciseDB API Engine & Media Adapter', () => {
     expect(results[0].n).toContain('Pec Deck')
   })
 
-  it('correctly identifies gym machine exercises with isGymMachine', () => {
+  it('correctly identifies gym equipment with isGymEquipment and isGymMachine', () => {
     // Machines in gym
     expect(isGymMachine('leverage machine')).toBe(true)
     expect(isGymMachine('cable')).toBe(true)
@@ -94,14 +95,39 @@ describe('ExerciseDB API Engine & Media Adapter', () => {
     expect(isGymMachine('band')).toBe(false)
     expect(isGymMachine('barra')).toBe(false)
     expect(isGymMachine('halteres')).toBe(false)
+
+    // Gym equipment includes barbells, dumbbells, cables, machines, smith, kettlebells
+    expect(isGymEquipment('barbell')).toBe(true)
+    expect(isGymEquipment('dumbbell')).toBe(true)
+    expect(isGymEquipment('cable')).toBe(true)
+    expect(isGymEquipment('smith machine')).toBe(true)
+    expect(isGymEquipment('kettlebell')).toBe(true)
+    expect(isGymEquipment('leverage machine')).toBe(true)
+    expect(isGymEquipment('body weight')).toBe(false)
+    expect(isGymEquipment('body weight', { n: 'Weighted Pull-Up' })).toBe(true)
   })
 
-  it('filters exercises by gym machines when equipment is "gym"', async () => {
-    const gymResults = await searchExerciseDB('', { equipment: 'gym', limit: 60 })
-    expect(gymResults.length).toBeGreaterThan(0)
-    // Every exercise returned must be on a gym machine
-    for (const ex of gymResults) {
-      expect(isGymMachine(ex.eq)).toBe(true)
+  it('filters exercises by gym equipment when equipment is "gym"', async () => {
+    const gymResults = await searchExerciseDB('', { equipment: 'gym', limit: 0 })
+    expect(gymResults.length).toBeGreaterThan(2000)
+
+    // Check presence of multiple equipment types in gym filter
+    const equipments = new Set(gymResults.map(e => e.eq))
+    expect(equipments.has('barbell')).toBe(true)
+    expect(equipments.has('dumbbell')).toBe(true)
+    expect(equipments.has('cable')).toBe(true)
+    expect(equipments.has('smith machine')).toBe(true)
+    expect(equipments.has('leverage machine')).toBe(true)
+    expect(equipments.has('kettlebell')).toBe(true)
+
+    // Check representation from all integrated datasets
+    const sources = new Set(gymResults.map(e => e.source || (e.id.startsWith('yh_') ? 'yuhonas' : (e.id.startsWith('rep_') ? 'repdb' : 'hasan'))))
+    expect(sources.has('yuhonas')).toBe(true)
+    expect(sources.has('repdb')).toBe(true)
+
+    // Every exercise returned must qualify as gym equipment
+    for (const ex of gymResults.slice(0, 100)) {
+      expect(isGymEquipment(ex.eq, ex)).toBe(true)
     }
   })
 })

@@ -475,7 +475,7 @@ function ExercisePicker({ onPick, close }) {
         const res = await searchExerciseDB(q, {
           bodyPart: bp === '★' ? '' : bp,
           equipment: eqOn,
-          limit: 120
+          limit: 0
         })
         if (active) {
           let sorted = res
@@ -514,7 +514,7 @@ function ExercisePicker({ onPick, close }) {
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
       <input
         className="input"
-        placeholder={t('Buscar no ExerciseDB…')}
+        placeholder={t('Buscar Exercícios')}
         value={q}
         onChange={e => { setQ(e.target.value); setShown(50) }}
       />
@@ -538,7 +538,9 @@ function ExercisePicker({ onPick, close }) {
     {(eqOpts.length > 0 || eq === 'gym') && (
       <div className="chips" style={{ marginBottom: 10 }}>
         <button className={'chip nocap' + (!eqOn ? ' on' : '')} onClick={() => { setEq(''); setShown(50) }}>{t('Any equipment')}</button>
-        <button className={'chip' + (eqOn === 'gym' ? ' on' : '')} onClick={() => { setEq(eqOn === 'gym' ? '' : 'gym'); setShown(50) }}>{t('Academia')}</button>
+        <button className={'chip' + (eqOn === 'gym' ? ' on' : '')} onClick={() => { setEq(eqOn === 'gym' ? '' : 'gym'); setShown(50) }}>
+          🏋️ {t('Academia')}
+        </button>
         {eqOpts.map(x => <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(50) }}>{t(x)}</button>)}
       </div>
     )}
@@ -583,7 +585,7 @@ function ExercisePicker({ onPick, close }) {
     </div>
 
     {list.length > shown && (
-      <><div style={{ height: 8 }} /><Button onClick={() => setShown(s => s + 50)}>{t('Show more')}</Button></>
+      <><div style={{ height: 8 }} /><Button onClick={() => setShown(s => s + 50)}>{t('Show more')} ({shown} / {list.length})</Button></>
     )}
   </>
 }

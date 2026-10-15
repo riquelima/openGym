@@ -3,7 +3,7 @@
 // anatomical targeting, coaching cues, and exercise variations in Portuguese do Brasil.
 
 import { useStore } from '../store/useStore.js'
-import { EXDB, EXIDX, isGymMachine } from './exercises.js'
+import { EXDB, EXIDX, isGymMachine, isGymEquipment } from './exercises.js'
 import { t } from './i18n.js'
 import {
   translateExerciseName,
@@ -352,7 +352,7 @@ export async function testExerciseDBConnection(key) {
   throw new Error(`Erro na conexão com ExerciseDB: HTTP ${resV1.status}`)
 }
 
-export { isGymMachine }
+export { isGymMachine, isGymEquipment }
 
 // Search ExerciseDB database: queries online API when key is configured,
 // and always provides complete ExerciseDB dataset with working demonstrations.
@@ -373,7 +373,7 @@ export async function searchExerciseDB(query = '', { bodyPart = '', equipment = 
     localList = localList.filter(e => e.bp && e.bp.toLowerCase().includes(bodyPart.toLowerCase()))
   }
   if (isGym) {
-    localList = localList.filter(e => isGymMachine(e.eq))
+    localList = localList.filter(e => isGymEquipment(e.eq, e))
   } else if (equipment && equipment !== 'all') {
     localList = localList.filter(e => e.eq && e.eq.toLowerCase().includes(equipment.toLowerCase()))
   }
@@ -393,7 +393,8 @@ export async function searchExerciseDB(query = '', { bodyPart = '', equipment = 
 
   // If no API key is set, return filtered ExerciseDB dataset
   if (!apiKey) {
-    const res = localList.slice(offset, offset + limit)
+    const end = limit > 0 ? (offset + limit) : localList.length
+    const res = localList.slice(offset, end)
     res.forEach(e => { EXIDX[e.id] = e })
     return res
   }

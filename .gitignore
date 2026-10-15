@@ -18,6 +18,7 @@ node_modules/
 # Local AI-assistant tooling — contributor's own setup, not part of the app
 .claude/
 .codex/
+.agents/
 CLAUDE.md
 AGENTS.md
 graphify-out/

@@ -34,7 +34,7 @@ export default function Library() {
         const results = await searchExerciseDB(q, {
           bodyPart: bp,
           equipment: eqOn,
-          limit: 120
+          limit: 0
         })
         if (active) {
           setList(results)
@@ -55,9 +55,6 @@ export default function Library() {
     <div className="hdr" style={{ paddingBottom: 6 }}>
       <div>
         <h1>{t('Exercises')}</h1>
-        <div className="sub">
-          {t('ExerciseDB · 11.000+ exercícios com demonstração em vídeo HD')}
-        </div>
       </div>
     </div>
 
@@ -66,7 +63,7 @@ export default function Library() {
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
       <input
         className="input"
-        placeholder={t('Buscar no ExerciseDB (ex: Supino, Bench Press, Peito)…')}
+        placeholder={t('Buscar Exercícios')}
         value={q}
         onChange={e => { setQ(e.target.value); setShown(40) }}
       />
@@ -100,7 +97,7 @@ export default function Library() {
           {t('Any equipment')}
         </button>
         <button className={'chip' + (eqOn === 'gym' ? ' on' : '')} onClick={() => { setEq(eqOn === 'gym' ? '' : 'gym'); setShown(40) }}>
-          {t('Academia')}
+          🏋️ {t('Academia')}
         </button>
         {eqOpts.map(x => (
           <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(40) }}>
@@ -165,7 +162,7 @@ export default function Library() {
     {list.length > shown && (
       <>
         <div style={{ height: 10 }} />
-        <Button onClick={() => setShown(s => s + 40)}>{t('Show more')}</Button>
+        <Button onClick={() => setShown(s => s + 40)}>{t('Show more')} ({shown} / {list.length})</Button>
       </>
     )}
   </>

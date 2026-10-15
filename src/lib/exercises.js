@@ -1,7 +1,9 @@
-import { EXDB } from './exercises-data.js'
+import { EXDB as HASAN_EXDB } from './exercises-data.js'
+import { YUHONAS_EXDB } from './datasets/yuhonas.js'
+import { REPDB_EXDB } from './datasets/repdb.js'
 import { t } from './i18n.js'
 
-export { EXDB }
+export const EXDB = [...HASAN_EXDB, ...YUHONAS_EXDB, ...REPDB_EXDB]
 export const EXIDX = {}
 EXDB.forEach(e => { EXIDX[e.id] = e })
 export const BODYPARTS = [...new Set(EXDB.map(e => e.bp))].sort()
@@ -37,6 +39,44 @@ export function isGymMachine(eq) {
     return true
   }
   return false
+}
+
+// Equipamentos típicos de academia: tudo com barras, halteres, cabos, máquinas,
+// smith, kettlebells, bancos, anilhas, aparelhos de cardio, etc.
+// Exclui apenas exercícios puramente livres com peso corporal sem sobrecarga.
+export function isGymEquipment(eq, ex) {
+  const l = String(eq || ex?.eq || '').toLowerCase().trim()
+  if (!l) return false
+
+  const pureBodyweight = [
+    'body weight',
+    'bodyweight',
+    'body only',
+    'none',
+    'sem equipamento',
+    'peso corporal'
+  ]
+
+  if (pureBodyweight.includes(l)) {
+    const title = String(ex?.n || ex?.name || ex?.rawName || '').toLowerCase()
+    if (
+      title.includes('weighted') ||
+      title.includes('com peso') ||
+      title.includes('machine') ||
+      title.includes('máquina') ||
+      title.includes('barbell') ||
+      title.includes('barra') ||
+      title.includes('dumbbell') ||
+      title.includes('haltere') ||
+      title.includes('assisted') ||
+      title.includes('assistid')
+    ) {
+      return true
+    }
+    return false
+  }
+
+  return true
 }
 
 // Equipment options present in a given list of exercises, most common first (issue #6).
