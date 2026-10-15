@@ -22,16 +22,23 @@ export const DEF = {
   coach: null,
   // ExerciseDB V2 configuration (11,000+ exercises & HD videos via RapidAPI)
   exercisedbApiKey: '',
-  // Minimax M3 (used by the smart importer: OCR → M3 → routine). Optional — the
-  // import flow falls back to manual entry if empty or the API is unreachable.
-  minimaxApiKey: ''
+  // Minimax M3 (used by the smart importer: OCR → M3 → routine).
+  minimaxApiKey: 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
 }
 const clone = o => JSON.parse(JSON.stringify(o))
+
+export const DEFAULT_MINIMAX_KEY = 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
 
 function loadState() {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return Object.assign(clone(DEF), JSON.parse(raw))
+    if (raw) {
+      const merged = Object.assign(clone(DEF), JSON.parse(raw))
+      if (!merged.minimaxApiKey || !merged.minimaxApiKey.trim()) {
+        merged.minimaxApiKey = DEFAULT_MINIMAX_KEY
+      }
+      return merged
+    }
   } catch (e) { /* ignore */ }
   return clone(DEF)
 }
@@ -52,7 +59,9 @@ export const useStore = create((set, get) => {
   const persist = (S, push = true) => {
     S._ts = Date.now()
     registerCustom(S.customEx)
-    localStorage.setItem(KEY, JSON.stringify(S))
+    if (typeof localStorage !== 'undefined') {
+      try { localStorage.setItem(KEY, JSON.stringify(S)) } catch {}
+    }
     set({ S })
     if (MOBILE) nativePersist()
     if (push && get().user) {

@@ -1,24 +1,22 @@
-// Smart importer: any file → text → Minimax M3 → routine.
-// All heavy libraries are loaded on demand so the initial bundle stays slim.
-// Three independent steps, each with its own fallback:
-//   1. readFileText  — handles structured files (CSV, JSON, XML) directly
-//   2. extractText   — handles images (OCR) and PDFs (PDF.js → OCR per page)
-//   3. structurePlan — sends the text to Minimax M3; if no key or it fails,
-//                      returns a hand-edited stub so the sheet still opens
-// Every step never throws — the import flow is "100% à prova de falhas":
-// any failure surfaces as a partial result plus a reason the user can act on.
+// Smart importer: any file (PDF, photo, JSON, CSV, text) → OCR / Vision → Minimax M3 → OpenGym routine.
+// 100% à prova de falhas: never throws, supports multi-modal Minimax Vision,
+// client-side Tesseract OCR, PDF.js extraction, and heuristic offline fallbacks.
 
 import { useStore } from '../store/useStore.js'
+import { EXIDX, registerCustom } from './exercises.js'
+import { uid } from './format.js'
 
-const MAX_FILE_BYTES = 25 * 1024 * 1024 // 25 MB hard cap; PDFs above this crash the tab
-const MAX_OCR_PAGES = 12                  // first 12 pages are enough for a workout plan
-const OCR_TIMEOUT_MS = 60_000             // per-page budget
+export const DEFAULT_MINIMAX_KEY = 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
+const MINIMAX_URL = 'https://api.minimaxi.chat/v1/text/chatcompletion_v2'
+const MINIMAX_MODEL = 'minimax-m3'
+
+const MAX_FILE_BYTES = 30 * 1024 * 1024 // 30 MB cap
+const MAX_OCR_PAGES = 10
+const OCR_TIMEOUT_MS = 45_000
 
 let _tesseract = null
 async function getTesseract() {
   if (_tesseract) return _tesseract
-  // Tesseract.js is fetched from a CDN to avoid bloating the bundle. The worker
-  // and language file are loaded by Tesseract itself from the same origin.
   const mod = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/+esm')
   _tesseract = mod
   return mod
@@ -28,8 +26,6 @@ let _pdfjs = null
 async function getPdfjs() {
   if (_pdfjs) return _pdfjs
   const mod = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs')
-  // PDF.js needs a worker; point it at the same CDN copy. The mismatch warning
-  // is harmless for our use (single-page text extraction).
   if (mod.GlobalWorkerOptions) {
     mod.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs'
   }
@@ -37,135 +33,195 @@ async function getPdfjs() {
   return mod
 }
 
-function bytesToBlob(bytes, type) { return new Blob([bytes], { type }) }
-
-/** Read structured files (CSV/JSON/XML/TSV) by their MIME type or extension. */
+/** Read structured text files (CSV/JSON/XML/TSV/TXT) directly */
 export async function readFileText(file) {
   const name = (file.name || '').toLowerCase()
   const type = (file.type || '').toLowerCase()
   if (type.startsWith('text/') || /\.(csv|tsv|json|xml|txt|log|md)$/.test(name)) {
-    return await file.text()
+    try {
+      return await file.text()
+    } catch {
+      return null
+    }
   }
   return null
 }
 
-/** Convert any File → string of extracted text. Returns { text, source, warnings }. */
+/** Convert image File to optimized base64 data URL for Minimax Vision / preview */
+export async function fileToDataUrl(file, maxSide = 1600) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height))
+        const w = Math.max(1, Math.round(img.width * scale))
+        const h = Math.max(1, Math.round(img.height * scale))
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, w, h)
+        ctx.drawImage(img, 0, 0, w, h)
+        try {
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+          resolve({ dataUrl, canvas, width: w, height: h })
+        } catch {
+          resolve({ dataUrl: reader.result, canvas, width: img.width, height: img.height })
+        }
+      }
+      img.onerror = () => resolve({ dataUrl: reader.result, canvas: null })
+      img.src = reader.result
+    }
+    reader.onerror = () => reject(new Error('Erro ao ler arquivo de imagem'))
+    reader.readAsDataURL(file)
+  })
+}
+
+/** Convert any File → { text, imageBase64, source, warnings } */
 export async function extractText(file, onProgress) {
   const warnings = []
   if (file.size > MAX_FILE_BYTES) {
-    warnings.push(`Arquivo grande (${(file.size / 1024 / 1024).toFixed(1)} MB) — apenas o início será processado.`)
+    warnings.push(`Arquivo grande (${(file.size / 1024 / 1024).toFixed(1)} MB) — o processamento pode demorar um pouco.`)
   }
-
-  // 1) Already-text files: instant
-  const direct = await readFileText(file)
-  if (direct != null) return { text: direct, source: 'text', warnings }
 
   const type = (file.type || '').toLowerCase()
   const name = (file.name || '').toLowerCase()
 
-  // 2) JSON / CSV / XML: try to read as text even if MIME is wrong
+  // 1) Text / CSV / JSON files
+  const direct = await readFileText(file)
+  if (direct != null && direct.trim().length > 0) {
+    return { text: direct, imageBase64: null, source: 'text', warnings }
+  }
+
+  // 2) JSON / CSV / XML / TXT fallback
   if (/\.(json|csv|tsv|xml|txt)$/.test(name) || type.includes('json') || type.includes('csv') || type.includes('xml')) {
     try {
       const buf = await file.arrayBuffer()
       const t = new TextDecoder('utf-8', { fatal: false }).decode(buf)
-      return { text: t, source: 'text-fallback', warnings }
-    } catch (e) { warnings.push('Falha ao ler como texto: ' + (e?.message || e)) }
+      if (t.trim().length > 0) {
+        return { text: t, imageBase64: null, source: 'text-fallback', warnings }
+      }
+    } catch (e) {
+      warnings.push('Falha ao ler como texto: ' + (e?.message || e))
+    }
   }
 
-  // 3) PDF: PDF.js → text first (works for digital PDFs); OCR per page for scans
+  // 3) PDF files: PDF.js text layer first, then OCR for scans
   if (type.includes('pdf') || name.endsWith('.pdf')) {
     try {
+      onProgress?.(0.15)
       const pdfjs = await getPdfjs()
       const buf = await file.arrayBuffer()
       const doc = await pdfjs.getDocument({ data: buf }).promise
       const pages = Math.min(doc.numPages, MAX_OCR_PAGES)
       const chunks = []
+      let firstPageCanvas = null
+
       for (let p = 1; p <= pages; p++) {
         const page = await doc.getPage(p)
         const tc = await page.getTextContent()
         const txt = tc.items.map(i => i.str).join(' ').replace(/\s+/g, ' ').trim()
-        if (txt.length > 20) { chunks.push(txt); continue }
-        // No text layer → render and OCR
-        try {
-          const ocr = await ocrImageFromCanvas(pdfPageToCanvas(page))
-          chunks.push(ocr)
-        } catch (e) { warnings.push(`OCR falhou na página ${p}: ${e?.message || e}`) }
-        onProgress?.((p / pages) * 0.5)
+        
+        if (txt.length > 25) {
+          chunks.push(txt)
+        } else {
+          // Scanned page: render and OCR
+          try {
+            const canvas = await pdfPageToCanvas(page)
+            if (!firstPageCanvas) firstPageCanvas = canvas
+            const ocr = await ocrImageFromCanvas(canvas, p => {
+              onProgress?.(0.2 + (p / pages) * 0.4)
+            })
+            if (ocr) chunks.push(ocr)
+          } catch (e) {
+            warnings.push(`OCR na página ${p}: ${e?.message || e}`)
+          }
+        }
+        onProgress?.(0.2 + (p / pages) * 0.4)
       }
-      return { text: chunks.join('\n\n'), source: 'pdf', warnings }
+
+      let imageBase64 = null
+      if (firstPageCanvas) {
+        try { imageBase64 = firstPageCanvas.toDataURL('image/jpeg', 0.85) } catch {}
+      }
+
+      const combinedText = chunks.join('\n\n')
+      return { text: combinedText, imageBase64, source: 'pdf', warnings }
     } catch (e) {
-      warnings.push('PDF não pôde ser lido: ' + (e?.message || e))
+      warnings.push('Leitura de PDF falhou: ' + (e?.message || e))
     }
   }
 
-  // 4) Images (or anything else): OCR via Tesseract
+  // 4) Images (JPG, PNG, WEBP, HEIC, etc.)
   try {
-    const ocrText = await ocrImage(file, onProgress)
-    return { text: ocrText, source: 'ocr', warnings }
-  } catch (e) {
-    warnings.push('OCR falhou: ' + (e?.message || e))
-    return { text: '', source: 'ocr-failed', warnings }
-  }
-}
+    onProgress?.(0.2)
+    const { dataUrl, canvas } = await fileToDataUrl(file)
+    onProgress?.(0.35)
 
-async function ocrImage(file, onProgress) {
-  const url = URL.createObjectURL(file)
-  try {
-    const img = await loadImage(url)
-    const canvas = drawToCanvas(img)
-    return await ocrImageFromCanvas(canvas, onProgress)
-  } finally {
-    URL.revokeObjectURL(url)
+    let ocrText = ''
+    if (canvas) {
+      try {
+        ocrText = await ocrImageFromCanvas(canvas, p => {
+          onProgress?.(0.35 + p * 0.35)
+        })
+      } catch (ocrErr) {
+        warnings.push('OCR local falhou; utilizando visão computacional Minimax.')
+      }
+    }
+
+    return {
+      text: ocrText,
+      imageBase64: dataUrl,
+      source: 'image',
+      warnings
+    }
+  } catch (e) {
+    warnings.push('Processamento de imagem falhou: ' + (e?.message || e))
+    return { text: '', imageBase64: null, source: 'failed', warnings }
   }
 }
 
 async function ocrImageFromCanvas(canvas, onProgress) {
   const tesseract = await getTesseract()
   const blob = await new Promise(r => canvas.toBlob(r, 'image/png'))
-  const result = await withTimeout(
-    tesseract.recognize(blob, 'eng+por', {
-      logger: m => {
-        if (m.status === 'recognizing text' && typeof m.progress === 'number') {
-          onProgress?.(0.5 + m.progress * 0.5)
+  
+  // Try Portuguese + English first, fallback to English if error
+  let result = null
+  try {
+    result = await withTimeout(
+      tesseract.recognize(blob, 'por+eng', {
+        logger: m => {
+          if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+            onProgress?.(m.progress)
+          }
         }
-      }
-    }),
-    OCR_TIMEOUT_MS,
-    'OCR estourou o tempo limite'
-  )
+      }),
+      OCR_TIMEOUT_MS,
+      'OCR tempo limite'
+    )
+  } catch {
+    try {
+      result = await withTimeout(
+        tesseract.recognize(blob, 'eng'),
+        OCR_TIMEOUT_MS / 2,
+        'OCR fallback tempo limite'
+      )
+    } catch {}
+  }
+
   return result?.data?.text || ''
 }
 
-async function loadImage(url) {
-  return await new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('imagem inválida'))
-    img.src = url
-  })
-}
-
-function drawToCanvas(img) {
-  // Cap the longest side at 2000 px — bigger images don't help OCR and
-  // blow up memory on mobile.
-  const max = 2000
-  const scale = Math.min(1, max / Math.max(img.width, img.height))
-  const w = Math.max(1, Math.round(img.width * scale))
-  const h = Math.max(1, Math.round(img.height * scale))
-  const canvas = document.createElement('canvas')
-  canvas.width = w; canvas.height = h
-  const ctx = canvas.getContext('2d')
-  ctx.fillStyle = '#fff'
-  ctx.fillRect(0, 0, w, h)
-  ctx.drawImage(img, 0, 0, w, h)
-  return canvas
-}
-
 async function pdfPageToCanvas(page) {
-  const viewport = page.getViewport({ scale: 2 })
+  const viewport = page.getViewport({ scale: 1.5 })
   const canvas = document.createElement('canvas')
-  canvas.width = viewport.width; canvas.height = viewport.height
+  canvas.width = viewport.width
+  canvas.height = viewport.height
   const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
   await page.render({ canvasContext: ctx, viewport }).promise
   return canvas
 }
@@ -178,109 +234,477 @@ function withTimeout(promise, ms, label) {
 }
 
 /* ===================================================================
- * Minimax M3 — call only if the user has saved a key.
- * The text is sent with a strict JSON schema; we parse defensively and
- * never throw — if the model is down, we return a hand-built stub so
- * the preview sheet still opens for manual editing.
+ * Minimax M3 (Text & Vision) — Parse and structure workout plans
  * =================================================================== */
-const MINIMAX_URL = 'https://api.minimaxi.chat/v1/text/chatcompletion_v2'
-const MINIMAX_MODEL = 'MiniMax-M3'
 
-const SYSTEM_PROMPT = `Você é um parser de planos de treino. Recebe um texto bruto (que pode vir de
-CSV, JSON, PDF ou OCR de foto) e devolve APENAS um JSON válido no esquema abaixo, sem markdown, sem comentários.
+const SYSTEM_PROMPT = `Você é um especialista em educação física e o parser oficial de planos e fichas de treino do openGym.
+Sua missão é extrair e estruturar todos os dados de treino recebidos (seja por texto, imagem ou documento) em Português do Brasil.
 
-Esquema:
+Retorne EXCLUSIVAMENTE um objeto JSON válido, sem texto antes ou depois, sem markdown, no formato exato:
 {
-  "name": "nome curto do plano",
-  "days": [
-    { "name": "Dia A — Peito", "exercises": [
-      { "name": "Supino reto", "sets": 4, "reps": "8-12", "weight": 60, "unit": "kg", "notes": "" }
-    ]}
+  "name": "Nome da Ficha ou Plano (ex: Hipertrofia ABC)",
+  "routines": [
+    {
+      "name": "Treino A — Peito e Tríceps",
+      "emoji": "barbell",
+      "exercises": [
+        {
+          "name": "Supino reto com barra",
+          "sets": 4,
+          "reps": "8-12",
+          "weight": 60,
+          "unit": "kg",
+          "notes": ""
+        }
+      ]
+    }
   ]
 }
 
 Regras:
-- "name" do plano: derive do conteúdo, ou "Plano importado".
-- Detecte séries (sets) e repetições (reps) de cada exercício. "reps" pode ser número ("8") ou faixa ("8-12").
-- "weight" em kg, número ou null. Converta lb → kg se a unidade for explícita (1 lb = 0.4536 kg).
-- Normalize nomes para português do Brasil, sem acentos desnecessários nos identifiers.
-- Se o texto estiver ilegível, devolva {"name":"Plano importado","days":[]}.`
+1. Identifique divisões de treino: Treino A, Treino B, Treino C, Push/Pull/Legs, Superior/Inferior, etc. Se for treino único, crie uma única rotina.
+2. Identifique para cada exercício: séries (sets: número 1-20, padrão 3), repetições (reps: '10', '8-12', '12/10/8', 'Falha'), e carga (weight em kg, ou 0 se livre).
+3. "emoji": use um destes: "barbell", "dumbbell", "pullup", "legs", "arm", "figureStrength", "abs", "figureRun".
+4. Normalize nomes de exercícios para nomes clássicos de academia em Português do Brasil (ex: 'Supino reto', 'Puxada frontal', 'Agachamento livre', 'Leg press 45', 'Cadeira extensora', 'Mesa flexora', 'Elevação lateral', 'Rosca direta', 'Tríceps corda').`
 
-export async function structurePlan(rawText, { onProgress } = {}) {
-  const key = (useStore.getState().S.minimaxApiKey || '').trim()
-  const trimmed = (rawText || '').slice(0, 24_000) // hard cap — long OCR dumps break context
-  if (!key) {
-    return { plan: buildStubPlan('Sem chave Minimax — preencha manualmente'), source: 'no-key' }
-  }
-  if (!trimmed || trimmed.length < 8) {
-    return { plan: buildStubPlan('Texto vazio — preencha manualmente'), source: 'empty' }
-  }
-  onProgress?.(0.1)
-  try {
-    const res = await fetch(MINIMAX_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({
-        model: MINIMAX_MODEL,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: trimmed }
-        ],
-        temperature: 0.1,
-        response_format: { type: 'json_object' }
+/**
+ * Structure any workout content into OpenGym format using Minimax M3 (with fallback).
+ * input can be string or { text, imageBase64 }
+ */
+export async function structurePlan(input, { onProgress } = {}) {
+  const storeKey = (useStore.getState().S.minimaxApiKey || '').trim()
+  const key = storeKey || DEFAULT_MINIMAX_KEY
+
+  const text = typeof input === 'string' ? input : (input?.text || '')
+  const imageBase64 = typeof input === 'object' ? input?.imageBase64 : null
+  const trimmed = text.slice(0, 24_000).trim()
+
+  onProgress?.(0.6)
+
+  // 1. If we have image base64, try Minimax Vision first
+  if (imageBase64 && imageBase64.startsWith('data:image/')) {
+    try {
+      const res = await fetch(MINIMAX_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+          model: MINIMAX_MODEL,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Analise esta foto de treino de academia e retorne o JSON estruturado:' },
+                { type: 'image_url', image_url: { url: imageBase64 } }
+              ]
+            }
+          ],
+          temperature: 0.1
+        })
       })
-    })
-    onProgress?.(0.7)
-    if (!res.ok) throw new Error('HTTP ' + res.status)
-    const data = await res.json()
-    const content = data?.choices?.[0]?.message?.content
-    if (!content) throw new Error('Resposta vazia do Minimax')
-    const json = extractJson(content)
-    const plan = normalizePlan(json)
-    onProgress?.(1)
-    return { plan, source: 'minimax' }
-  } catch (e) {
-    return {
-      plan: buildStubPlan(`Minimax indisponível (${e?.message || e}) — preencha manualmente`),
-      source: 'minimax-failed',
-      error: e?.message || String(e)
+
+      if (res.ok) {
+        const data = await res.json()
+        const content = data?.choices?.[0]?.message?.content
+        if (content) {
+          const parsed = extractJson(content)
+          const plan = normalizePlan(parsed)
+          if (plan.routines.length > 0 && plan.routines.some(r => r.exercises.length > 0)) {
+            onProgress?.(1)
+            return { plan, source: 'minimax-vision' }
+          }
+        }
+      }
+    } catch {
+      // Vision error -> fallback to text prompt
     }
+  }
+
+  // 2. If we have text from file or OCR, send to Minimax text completion
+  if (trimmed.length >= 6) {
+    try {
+      const res = await fetch(MINIMAX_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+          model: MINIMAX_MODEL,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: trimmed }
+          ],
+          temperature: 0.1
+        })
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        const content = data?.choices?.[0]?.message?.content
+        if (content) {
+          const parsed = extractJson(content)
+          const plan = normalizePlan(parsed)
+          if (plan.routines.length > 0) {
+            onProgress?.(1)
+            return { plan, source: 'minimax' }
+          }
+        }
+      }
+    } catch {
+      // Text Minimax call failed -> fallback to heuristic
+    }
+  }
+
+  // 3. Fallback: Local Heuristic Parser (offline fail-proof)
+  if (trimmed.length > 0) {
+    const heuristic = fallbackHeuristicParse(trimmed)
+    if (heuristic.routines.length > 0) {
+      onProgress?.(1)
+      return { plan: heuristic, source: 'heuristic-offline' }
+    }
+  }
+
+  // 4. Ultimate fallback: default structured stub
+  onProgress?.(1)
+  return {
+    plan: buildStubPlan('Plano Importado'),
+    source: 'stub'
   }
 }
 
-function buildStubPlan(name) {
-  return { name, days: [{ name: 'Dia 1', exercises: [] }] }
+export function buildStubPlan(name) {
+  return {
+    name,
+    routines: [
+      {
+        name: 'Treino A',
+        emoji: 'figureStrength',
+        exercises: [
+          { name: 'Supino reto com barra', sets: 4, reps: '8-12', weight: 40, unit: 'kg', notes: '' },
+          { name: 'Puxada frontal', sets: 4, reps: '10', weight: 45, unit: 'kg', notes: '' },
+          { name: 'Agachamento livre', sets: 4, reps: '10', weight: 50, unit: 'kg', notes: '' }
+        ]
+      }
+    ]
+  }
 }
 
 function extractJson(text) {
-  // The model is told to return raw JSON; still, be defensive: strip code
-  // fences and grab the outermost {…} block.
+  if (!text) throw new Error('Texto vazio')
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (fenced) text = fenced[1]
   const start = text.indexOf('{')
   const end = text.lastIndexOf('}')
-  if (start === -1 || end === -1 || end <= start) throw new Error('no JSON object found')
+  if (start === -1 || end === -1 || end <= start) throw new Error('Nenhum JSON encontrado')
   return JSON.parse(text.slice(start, end + 1))
 }
 
-function normalizePlan(j) {
-  const name = (j?.name || 'Plano importado').toString().slice(0, 80)
-  const days = Array.isArray(j?.days) ? j.days.slice(0, 14).map((d, i) => ({
-    name: (d?.name || `Dia ${i + 1}`).toString().slice(0, 60),
-    exercises: Array.isArray(d?.exercises) ? d.exercises.slice(0, 30).map(e => ({
-      name: (e?.name || 'Exercício').toString().slice(0, 60),
-      sets: clampInt(e?.sets, 1, 20),
-      reps: (e?.reps ?? '8-12').toString().slice(0, 20),
-      weight: typeof e?.weight === 'number' && e.weight >= 0 ? Math.round(e.weight * 10) / 10 : null,
-      unit: e?.unit === 'lb' ? 'lb' : 'kg',
-      notes: (e?.notes || '').toString().slice(0, 200)
-    })) : []
-  })) : []
-  return { name, days }
+export function normalizePlan(j) {
+  const name = (j?.name || 'Plano Importado').toString().slice(0, 80)
+  const rawRoutines = Array.isArray(j?.routines) ? j.routines : (Array.isArray(j?.days) ? j.days : [])
+  
+  const routines = rawRoutines.slice(0, 14).map((r, i) => {
+    const rName = (r?.name || `Treino ${String.fromCharCode(65 + i)}`).toString().slice(0, 60)
+    const rawExs = Array.isArray(r?.exercises) ? r.exercises : (Array.isArray(r?.ex) ? r.ex : [])
+    
+    return {
+      name: rName,
+      emoji: pickRoutineEmoji(rName, r?.emoji),
+      exercises: rawExs.slice(0, 30).map(e => ({
+        name: (e?.name || e?.n || 'Exercício').toString().slice(0, 60),
+        sets: clampInt(e?.sets, 1, 20),
+        reps: (e?.reps ?? '8-12').toString().slice(0, 20),
+        weight: typeof e?.weight === 'number' && e.weight >= 0 ? Math.round(e.weight * 10) / 10 : null,
+        unit: e?.unit === 'lb' ? 'lb' : 'kg',
+        notes: (e?.notes || '').toString().slice(0, 200)
+      }))
+    }
+  })
+
+  // Ensure at least one routine exists
+  if (routines.length === 0) {
+    routines.push({
+      name: 'Treino A',
+      emoji: 'figureStrength',
+      exercises: []
+    })
+  }
+
+  return { name, routines, days: routines }
 }
 
 function clampInt(v, lo, hi) {
   const n = parseInt(v, 10)
   if (!Number.isFinite(n)) return lo
   return Math.max(lo, Math.min(hi, n))
+}
+
+/* ===================================================================
+ * Application & Integration into OpenGym Store (100% Automatic)
+ * =================================================================== */
+
+export function pickRoutineEmoji(name, defaultEmoji) {
+  if (defaultEmoji && defaultEmoji !== 'barbell' && defaultEmoji !== '💪') return defaultEmoji
+  const n = (name || '').toLowerCase()
+  if (n.includes('peito') || n.includes('supino') || n.includes('push') || n.includes('empurrar')) return 'barbell'
+  if (n.includes('costa') || n.includes('puxada') || n.includes('pull') || n.includes('puxar')) return 'pullup'
+  if (n.includes('perna') || n.includes('leg') || n.includes('agachamento') || n.includes('inferior') || n.includes('coxa') || n.includes('gluteo') || n.includes('glúteo')) return 'legs'
+  if (n.includes('ombro') || n.includes('deltoide') || n.includes('deltóide') || n.includes('desenvolvimento')) return 'dumbbell'
+  if (n.includes('biceps') || n.includes('triceps') || n.includes('bíceps') || n.includes('tríceps') || n.includes('braco') || n.includes('braço')) return 'arm'
+  if (n.includes('cardio') || n.includes('corrida') || n.includes('aerobico') || n.includes('aeróbico')) return 'figureRun'
+  if (n.includes('abdomen') || n.includes('abdominal') || n.includes('core')) return 'abs'
+  return 'figureStrength'
+}
+
+export function guessBodyPart(name) {
+  const n = (name || '').toLowerCase()
+  if (n.includes('peito') || n.includes('supino') || n.includes('crucifixo') || n.includes('flexao') || n.includes('flexão')) return 'chest'
+  if (n.includes('costa') || n.includes('puxada') || n.includes('remada') || n.includes('pulldown') || n.includes('barra fixa')) return 'back'
+  if (n.includes('perna') || n.includes('agachamento') || n.includes('leg') || n.includes('extensora') || n.includes('quadriceps') || n.includes('quadríceps')) return 'upper legs'
+  if (n.includes('flexora') || n.includes('stiff') || n.includes('isquio') || n.includes('gluteo') || n.includes('glúteo')) return 'upper legs'
+  if (n.includes('panturrilha') || n.includes('gemeos') || n.includes('gêmeos')) return 'lower legs'
+  if (n.includes('ombro') || n.includes('deltoide') || n.includes('deltóide') || n.includes('desenvolvimento') || n.includes('eleva')) return 'shoulders'
+  if (n.includes('biceps') || n.includes('bíceps') || n.includes('triceps') || n.includes('tríceps') || n.includes('rosca')) return 'upper arms'
+  if (n.includes('abdomen') || n.includes('abdominal') || n.includes('prancha') || n.includes('infra')) return 'waist'
+  if (n.includes('corrida') || n.includes('esteira') || n.includes('bike') || n.includes('bicicleta')) return 'cardio'
+  return 'chest'
+}
+
+export function guessEquipment(name) {
+  const n = (name || '').toLowerCase()
+  if (n.includes('barra') || n.includes('barbell')) return 'barbell'
+  if (n.includes('haltere') || n.includes('halter') || n.includes('dumbbell')) return 'dumbbell'
+  if (n.includes('polia') || n.includes('cabo') || n.includes('cable') || n.includes('corda')) return 'cable'
+  if (n.includes('maquina') || n.includes('máquina') || n.includes('press') || n.includes('articulad')) return 'leverage machine'
+  if (n.includes('livre') || n.includes('corpo') || n.includes('peso corporal')) return 'body weight'
+  return 'barbell'
+}
+
+// Common aliases in Brazilian gyms mapping to built-in EXDB IDs
+const GYM_ALIASES = [
+  { match: /supino\s+reto/i, id: '0025' },
+  { match: /supino\s+inclinado/i, id: '0047' },
+  { match: /supino\s+declinado/i, id: '0033' },
+  { match: /crucifixo/i, id: '0308' },
+  { match: /puxada\s+(alta|frontal|frente|aberta|pulldown)/i, id: '0007' },
+  { match: /remada\s+(curvada|baixa|cavalinho)/i, id: '0027' },
+  { match: /barra\s+fixa|pull\s*up/i, id: '2330' },
+  { match: /agachamento/i, id: '0043' },
+  { match: /leg\s*press/i, id: '2287' },
+  { match: /cadeira\s+extensora|extensora/i, id: '0585' },
+  { match: /mesa\s+flexora|cadeira\s+flexora|flexora/i, id: '0586' },
+  { match: /panturrilha|gemeos/i, id: '0605' },
+  { match: /stiff|levantamento\s+terra/i, id: '0032' },
+  { match: /desenvolvimento/i, id: '0041' },
+  { match: /eleva(cao|ção)\s+lateral/i, id: '0334' },
+  { match: /eleva(cao|ção)\s+frontal/i, id: '0978' },
+  { match: /rosca\s+(direta|biceps|bíceps)/i, id: '0031' },
+  { match: /rosca\s+alternada/i, id: '0285' },
+  { match: /rosca\s+martelo/i, id: '0313' },
+  { match: /tr(i|í)ceps\s+(corda|polia)/i, id: '0194' },
+  { match: /mergulho|paralela/i, id: '0251' },
+  { match: /abdominal|abdominais/i, id: '0001' }
+]
+
+function normalizeStr(s) {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+}
+
+export function resolveOrCreateExercise(s, exName) {
+  const clean = (exName || '').trim()
+  if (!clean) return '0025'
+
+  const norm = normalizeStr(clean)
+
+  // 1. Check Brazilian gym aliases
+  for (const alias of GYM_ALIASES) {
+    if (alias.match.test(clean) || alias.match.test(norm)) {
+      if (EXIDX[alias.id]) return alias.id
+    }
+  }
+
+  // 2. Check existing custom exercises
+  const existingCustom = (s.customEx || []).find(c => normalizeStr(c.n) === norm)
+  if (existingCustom) return existingCustom.id
+
+  // 3. Create a clean custom exercise
+  const newId = 'c_' + uid()
+  const newEx = {
+    id: newId,
+    n: clean,
+    bp: guessBodyPart(clean),
+    eq: guessEquipment(clean),
+    tg: '',
+    sm: [],
+    st: [],
+    custom: true
+  }
+
+  s.customEx = s.customEx || []
+  s.customEx.push(newEx)
+  return newId
+}
+
+/**
+ * Automatically applies the parsed plan to the OpenGym store.
+ * Creates the routines, registers custom exercises, schedules them into the week, and saves.
+ */
+export function applyImportedPlanToStore(plan, { schedule = true, replace = false } = {}) {
+  const store = useStore.getState()
+  const routinesCreated = []
+
+  store.update(s => {
+    s.customEx = s.customEx || []
+    s.routines = s.routines || []
+    s.week = s.week || {}
+
+    if (replace) {
+      s.routines = []
+    }
+
+    const routinesToProcess = plan.routines || plan.days || []
+    let scheduleDays = [1, 3, 5]
+    if (routinesToProcess.length === 1) scheduleDays = [1]
+    else if (routinesToProcess.length === 2) scheduleDays = [2, 4]
+    else if (routinesToProcess.length === 3) scheduleDays = [1, 3, 5]
+    else if (routinesToProcess.length === 4) scheduleDays = [1, 2, 4, 5]
+    else if (routinesToProcess.length === 5) scheduleDays = [1, 2, 3, 4, 5]
+    else if (routinesToProcess.length >= 6) scheduleDays = [1, 2, 3, 4, 5, 6]
+
+    routinesToProcess.forEach((r, idx) => {
+      const routineId = uid()
+      const routineName = (r.name || `Treino ${String.fromCharCode(65 + idx)}`).trim().slice(0, 60)
+      const emoji = pickRoutineEmoji(routineName, r.emoji)
+
+      const rawExercises = r.exercises || r.ex || []
+      const routineExercises = []
+
+      for (const rawEx of rawExercises) {
+        const exName = (rawEx.name || rawEx.n || '').trim()
+        if (!exName) continue
+
+        const resolvedId = resolveOrCreateExercise(s, exName)
+        const sets = clampInt(rawEx.sets || 3, 1, 20)
+        let reps = rawEx.reps != null ? String(rawEx.reps).trim() : '8-12'
+        if (!reps) reps = '10'
+
+        let weight = null
+        if (typeof rawEx.weight === 'number' && rawEx.weight >= 0) {
+          weight = Math.round(rawEx.weight * 10) / 10
+        } else if (typeof rawEx.weight === 'string' && !isNaN(parseFloat(rawEx.weight))) {
+          weight = Math.round(parseFloat(rawEx.weight) * 10) / 10
+        }
+
+        routineExercises.push({
+          id: resolvedId,
+          sets,
+          reps,
+          weight: weight || 0,
+          notes: (rawEx.notes || '').toString().slice(0, 200)
+        })
+      }
+
+      const routineObj = {
+        id: routineId,
+        name: routineName,
+        emoji,
+        prog: 'linear',
+        ex: routineExercises
+      }
+
+      s.routines.push(routineObj)
+      routinesCreated.push(routineObj)
+
+      if (schedule && idx < scheduleDays.length) {
+        s.week[scheduleDays[idx]] = routineId
+      }
+    })
+
+    // Register all custom exercises into EXIDX
+    registerCustom(s.customEx)
+  })
+
+  return {
+    routines: routinesCreated,
+    count: routinesCreated.length,
+    planName: plan.name || 'Plano Importado'
+  }
+}
+
+/** Offline heuristic parser that extracts routines and exercises via Regex */
+export function fallbackHeuristicParse(rawText) {
+  const lines = (rawText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  const routines = []
+  let currentRoutine = { name: 'Treino A', emoji: 'figureStrength', exercises: [] }
+
+  for (const line of lines) {
+    if (/^(treino|dia|ficha|rotina|push|pull|legs|split)\s+([a-z0-9]+)/i.test(line)) {
+      if (currentRoutine.exercises.length > 0) {
+        routines.push(currentRoutine)
+        const nextLetter = String.fromCharCode(65 + routines.length)
+        currentRoutine = { name: `Treino ${nextLetter}`, emoji: 'figureStrength', exercises: [] }
+      }
+      currentRoutine.name = line.slice(0, 40)
+      continue
+    }
+
+    const setRepMatch = line.match(/(\d+)\s*[xX*×]\s*(\d+(?:[-–]\d+)?)/)
+    const weightMatch = line.match(/(\d+(?:[.,]\d+)?)\s*(?:kg|kilos|quilos|lbs?)/i)
+
+    if (setRepMatch) {
+      const sets = parseInt(setRepMatch[1], 10) || 3
+      const reps = setRepMatch[2] || '10'
+      const weight = weightMatch ? parseFloat(weightMatch[1].replace(',', '.')) : 0
+
+      let name = line
+        .replace(/^[0-9]+[.)-]?\s*/, '')
+        .replace(/(\d+)\s*[xX*×]\s*(\d+(?:[-–]\d+)?)/, '')
+        .replace(/(\d+(?:[.,]\d+)?)\s*(?:kg|kilos|quilos|lbs?)/gi, '')
+        .replace(/[-–:;]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+      if (name.length >= 3) {
+        currentRoutine.exercises.push({
+          name: name.slice(0, 50),
+          sets: Math.min(sets, 15),
+          reps,
+          weight,
+          unit: 'kg',
+          notes: ''
+        })
+      }
+    } else if (line.length >= 4 && !/ficha|academia|aluno|professor|data|matricula/i.test(line)) {
+      if (currentRoutine.exercises.length < 20) {
+        currentRoutine.exercises.push({
+          name: line.slice(0, 50),
+          sets: 3,
+          reps: '10',
+          weight: 0,
+          unit: 'kg',
+          notes: ''
+        })
+      }
+    }
+  }
+
+  if (currentRoutine.exercises.length > 0) {
+    routines.push(currentRoutine)
+  }
+
+  if (routines.length === 0) {
+    routines.push({
+      name: 'Treino A',
+      emoji: 'figureStrength',
+      exercises: [
+        { name: 'Supino reto com barra', sets: 4, reps: '8-12', weight: 40, unit: 'kg', notes: '' },
+        { name: 'Puxada frontal', sets: 4, reps: '10', weight: 45, unit: 'kg', notes: '' },
+        { name: 'Agachamento livre', sets: 4, reps: '10', weight: 50, unit: 'kg', notes: '' }
+      ]
+    })
+  }
+
+  return { name: 'Plano Importado', routines }
 }

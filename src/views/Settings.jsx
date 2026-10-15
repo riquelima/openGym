@@ -10,7 +10,7 @@ import { wakeLockSupported } from '../lib/wakelock.js'
 import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
 import { MOBILE, shareExport, syncReminder } from '../lib/mobile.js'
-import { loadStarterPlan, confirmSheet, importFromApp } from '../sheets.jsx'
+import { loadStarterPlan, confirmSheet, importFromApp, smartImportFromApp } from '../sheets.jsx'
 import { coachAvailable, hasConsent } from '../lib/coach.js'
 import { forgetCoach } from '../lib/coach-api.js'
 import { testExerciseDBConnection } from '../lib/exercisedb-api.js'
@@ -29,7 +29,9 @@ export default function Settings() {
   const wakeOK = wakeLockSupported()
   const [apiKeyInput, setApiKeyInput] = useState(S.exercisedbApiKey || '')
   const [testingKey, setTestingKey] = useState(false)
-  const [minimaxKeyInput, setMinimaxKeyInput] = useState(S.minimaxApiKey || '')
+  const [minimaxKeyInput, setMinimaxKeyInput] = useState(
+    S.minimaxApiKey || 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
+  )
   const [testingMinimax, setTestingMinimax] = useState(false)
   const saveMinimaxKey = async () => {
     const key = minimaxKeyInput.trim()
@@ -79,17 +81,42 @@ export default function Settings() {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href)
     toast(t('Backup exported'))
   }
-  const doImport = ev => {
-    const f = ev.target.files[0]; if (!f) return
-    const rd = new FileReader()
-    rd.onload = () => {
+  const doImport = async ev => {
+    const f = ev.target.files?.[0]
+    if (!f) return
+    ev.target.value = ''
+
+    const name = (f.name || '').toLowerCase()
+    const type = (f.type || '').toLowerCase()
+
+    if (name.endsWith('.json') || type.includes('json')) {
       try {
-        const data = JSON.parse(rd.result)
-        if (!data.workouts || !data.routines) throw new Error('not an openGym backup')
-        confirmSheet({ title: t('Import backup?'), message: t('This replaces all current data with the backup file.'), confirmText: t('Import'), danger: true, onConfirm: () => { replaceState(Object.assign(JSON.parse(JSON.stringify(DEF)), data), true); toast(t('Backup imported')) } })
-      } catch (e) { toast(t('Import failed: {0}', e.message)) }
+        const text = await f.text()
+        const data = JSON.parse(text)
+        if (data && Array.isArray(data.workouts) && Array.isArray(data.routines)) {
+          confirmSheet({
+            title: t('Backup completo do OpenGym'),
+            message: t('Deseja restaurar todo o backup (substitui os dados atuais) ou importar apenas as rotinas de treino?'),
+            confirmText: t('Restaurar tudo'),
+            cancelText: t('Importar rotinas'),
+            danger: true,
+            onConfirm: () => {
+              replaceState(Object.assign(JSON.parse(JSON.stringify(DEF)), data), true)
+              toast(t('Backup restaurado com sucesso!'))
+            },
+            onCancel: () => {
+              smartImportFromApp(f)
+            }
+          })
+          return
+        }
+      } catch {
+        // Not a JSON -> let the smart importer handle it
+      }
     }
-    rd.readAsText(f)
+
+    // For ANY other file (PDF, photo, image, scan, CSV, TXT, non-backup JSON):
+    smartImportFromApp(f)
   }
   const signInHere = async () => {
     try { const u = await passkeyLogin(); setUser(u); await pullState(); toast(t('Welcome back, {0}', u.name)) }
@@ -283,16 +310,18 @@ export default function Settings() {
       <Row icon="shuffle" iconTint="var(--teal)" title={t('Import from another app')}
         subtitle={t('FitNotes, Strong, Hevy — or body weight from Apple Health')}
         accessory="chevron" onClick={() => importRef.current.click()} />
-      <Row icon="upload" iconTint="var(--blue)" title={t('Import backup')} accessory="chevron" onClick={() => fileRef.current.click()} />
+      <Row icon="upload" iconTint="var(--blue)" title={t('Importar backup ou treino')}
+        subtitle={t('PDF, foto, ficha de treino ou JSON — com OCR e IA')}
+        accessory="chevron" onClick={() => fileRef.current.click()} />
       <Row icon="download" iconTint="var(--blue)" title={t('Export backup (JSON)')} accessory="chevron" onClick={doExport} />
       {/* Also drops anything the Coach is holding server-side: a wipe that leaves a pending
           proposal on the server behind would be a wipe in name only. */}
       <Row icon="trash" iconTint="var(--red)" title={t('Reset everything')} danger onClick={() => confirmSheet({ title: t('Reset everything?'), message: t('Deletes your plan, workouts and body weight on this device. This cannot be undone.'), confirmText: t('Delete everything'), danger: true, onConfirm: () => { if (user) forgetCoach().catch(() => {}); replaceState(JSON.parse(JSON.stringify(DEF)), true); nav('/home'); toast(t('All data reset')) } })} />
     </Section>
-    <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={doImport} />
+    <input ref={fileRef} type="file" accept="*/*" style={{ display: 'none' }} onChange={doImport} />
     {/* Reset after reading so picking the same file twice still fires onChange. */}
-    <input ref={importRef} type="file" accept=".csv,.xml,text/csv,text/xml" style={{ display: 'none' }}
-      onChange={ev => { const f = ev.target.files[0]; if (f) importFromApp(f); ev.target.value = '' }} />
+    <input ref={importRef} type="file" accept="*/*" style={{ display: 'none' }}
+      onChange={doImport} />
 
     {/* "Add to Home screen" makes no sense inside the native app */}
     {!MOBILE && <div style={{ marginTop: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

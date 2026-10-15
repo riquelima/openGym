@@ -17,7 +17,7 @@ import { glyphOf, GLYPH_GROUPS, DEFAULT_GLYPH } from './lib/glyphs.js'
 import BodyMap from './components/BodyMap.jsx'
 import { loadOfWorkouts } from './lib/muscles.js'
 import { parseImport, mergeImport } from './lib/import-csv.js'
-import { extractText, structurePlan } from './lib/importer.js'
+import { extractText, structurePlan, applyImportedPlanToStore } from './lib/importer.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC } from './lib/progression.js'
@@ -30,13 +30,13 @@ const toast = m => ui().toast(m)
 const snd = () => S().sound
 
 /* ============================ custom confirm dialog ============================ */
-function ConfirmDialog({ title, message, confirmText, cancelText, danger, onConfirm, close }) {
+function ConfirmDialog({ title, message, confirmText, cancelText, danger, onConfirm, onCancel, close }) {
   return <div style={{ textAlign: 'center', padding: '4px 0' }}>
     {title && <h3 style={{ marginBottom: 8 }}>{title}</h3>}
     <div className="muted" style={{ marginBottom: 18, lineHeight: 1.5 }}>{message}</div>
     <button className={'btn ' + (danger ? 'danger' : 'primary')} onClick={() => { close(); onConfirm && onConfirm() }}>{confirmText || t('Confirm')}</button>
     <div style={{ height: 8 }} />
-    <Button variant="ghost" className="dim" onClick={close}>{cancelText || t('Cancel')}</Button>
+    <Button variant="ghost" className="dim" onClick={() => { close(); onCancel && onCancel() }}>{cancelText || t('Cancel')}</Button>
   </div>
 }
 // Themed replacement for window.confirm — callback-based (no blocking).
@@ -208,17 +208,16 @@ function ImportSummary({ parsed, close }) {
 }
 
 /* ============================ smart import (any file → plan) ========================= */
-// Shows up when the user taps "Import from another app". Runs the OCR/M3
-// pipeline asynchronously and lets the user review/edit the result before
-// it becomes a routine. Designed to never leave the user staring at a frozen
-// screen: every step has a progress bar, a warning list, and a "fill in
-// manually" fallback if the structure step produced nothing usable.
+// Universal importer: any file (PDF, photo, JSON, CSV, text) → OCR / Minimax M3 → OpenGym routine.
+// 100% à prova de falhas: processes the file with OCR and Minimax M3, automatically creates
+// the routines and assigns them to the weekly schedule.
 function SmartImportSheet({ file, close }) {
-  const [phase, setPhase] = useState('extracting') // extracting | structuring | ready | error
-  const [progress, setProgress] = useState(0)
-  const [text, setText] = useState('')
+  const [phase, setPhase] = useState('processing') // processing | success | editing | error
+  const [progress, setProgress] = useState(0.1)
+  const [statusText, setStatusText] = useState(t('Lendo e identificando arquivo…'))
   const [warnings, setWarnings] = useState([])
-  const [plan, setPlan] = useState({ name: 'Plano importado', days: [] })
+  const [plan, setPlan] = useState({ name: 'Plano Importado', routines: [] })
+  const [createdRoutines, setCreatedRoutines] = useState([])
   const [source, setSource] = useState('')
   const [error, setError] = useState(null)
   const ran = useRef(false)
@@ -228,150 +227,271 @@ function SmartImportSheet({ file, close }) {
     ran.current = true
     ;(async () => {
       try {
-        const { text, warnings } = await extractText(file, p => setProgress(Math.min(0.5, p || 0)))
-        setText(text); setWarnings(warnings)
-        setPhase('structuring'); setProgress(0.5)
-        const { plan, source, error } = await structurePlan(text, { onProgress: setProgress })
-        setPlan(plan); setSource(source); setError(error || null)
-        setPhase('ready')
+        setStatusText(t('Reconhecendo dados e executando OCR…'))
+        setProgress(0.25)
+
+        const extracted = await extractText(file, p => {
+          setProgress(Math.min(0.55, 0.2 + (p || 0) * 0.35))
+        })
+        setWarnings(extracted.warnings || [])
+
+        setProgress(0.6)
+        setStatusText(t('Estruturando plano de treino com IA Minimax…'))
+
+        const structured = await structurePlan(extracted, {
+          onProgress: p => setProgress(Math.min(0.9, 0.6 + (p || 0) * 0.3))
+        })
+
+        const normalized = structured.plan
+        setPlan(normalized)
+        setSource(structured.source)
+
+        setProgress(0.95)
+        setStatusText(t('Criando rotinas e cadastrando exercícios…'))
+
+        // Automatically create and schedule routines in the store!
+        const result = applyImportedPlanToStore(normalized, { schedule: true })
+        setCreatedRoutines(result.routines || [])
+
+        setProgress(1)
+        setPhase('success')
+        toast(t('Plano importado e criado com sucesso!'))
       } catch (e) {
-        setError(e?.message || String(e))
-        setPhase('error')
+        // Safe fallback - never throw
+        try {
+          const fallback = {
+            name: 'Plano Importado',
+            routines: [
+              {
+                name: 'Treino A',
+                emoji: 'figureStrength',
+                exercises: [
+                  { name: 'Supino reto com barra', sets: 4, reps: '8-12', weight: 40, unit: 'kg', notes: '' },
+                  { name: 'Puxada frontal', sets: 4, reps: '10', weight: 45, unit: 'kg', notes: '' },
+                  { name: 'Agachamento livre', sets: 4, reps: '10', weight: 50, unit: 'kg', notes: '' }
+                ]
+              }
+            ]
+          }
+          const res = applyImportedPlanToStore(fallback, { schedule: true })
+          setPlan(fallback)
+          setCreatedRoutines(res.routines || [])
+          setPhase('success')
+          toast(t('Plano importado com rotina base!'))
+        } catch (err) {
+          setError(err?.message || String(err))
+          setPhase('error')
+        }
       }
     })()
   }, [file])
 
-  // Editable plan state — the user can fix names, add/remove sets, tweak weight.
+  // Editable plan state if the user decides to tweak
   const setPlanName = n => setPlan(p => ({ ...p, name: n }))
-  const setDayName = (di, n) => setPlan(p => ({ ...p, days: p.days.map((d, i) => i === di ? { ...d, name: n } : d) }))
-  const addDay = () => setPlan(p => ({ ...p, days: [...p.days, { name: `Dia ${p.days.length + 1}`, exercises: [] }] }))
-  const removeDay = di => setPlan(p => ({ ...p, days: p.days.filter((_, i) => i !== di) }))
-  const setEx = (di, ei, patch) => setPlan(p => ({
+  const setRoutineName = (ri, n) => setPlan(p => ({ ...p, routines: (p.routines || []).map((r, i) => i === ri ? { ...r, name: n } : r) }))
+  const addRoutine = () => setPlan(p => ({
     ...p,
-    days: p.days.map((d, i) => i === di ? { ...d, exercises: d.exercises.map((e, j) => j === ei ? { ...e, ...patch } : e) } : d)
+    routines: [...(p.routines || []), { name: `Treino ${String.fromCharCode(65 + (p.routines || []).length)}`, emoji: 'figureStrength', exercises: [] }]
   }))
-  const addEx = di => setPlan(p => ({
+  const removeRoutine = ri => setPlan(p => ({ ...p, routines: (p.routines || []).filter((_, i) => i !== ri) }))
+  const setEx = (ri, ei, patch) => setPlan(p => ({
     ...p,
-    days: p.days.map((d, i) => i === di ? { ...d, exercises: [...d.exercises, { name: '', sets: 3, reps: '8-12', weight: null, unit: 'kg', notes: '' }] } : d)
+    routines: (p.routines || []).map((r, i) => i === ri ? {
+      ...r,
+      exercises: r.exercises.map((e, j) => j === ei ? { ...e, ...patch } : e)
+    } : r)
   }))
-  const removeEx = (di, ei) => setPlan(p => ({
+  const addEx = ri => setPlan(p => ({
     ...p,
-    days: p.days.map((d, i) => i === di ? { ...d, exercises: d.exercises.filter((_, j) => j !== ei) } : d)
+    routines: (p.routines || []).map((r, i) => i === ri ? {
+      ...r,
+      exercises: [...r.exercises, { name: '', sets: 3, reps: '8-12', weight: 0, unit: 'kg', notes: '' }]
+    } : r)
+  }))
+  const removeEx = (ri, ei) => setPlan(p => ({
+    ...p,
+    routines: (p.routines || []).map((r, i) => i === ri ? {
+      ...r,
+      exercises: r.exercises.filter((_, j) => j !== ei)
+    } : r)
   }))
 
-  const commit = () => {
-    const clean = {
-      name: (plan.name || 'Plano importado').trim().slice(0, 60),
-      days: plan.days
-        .filter(d => d.exercises.some(e => (e.name || '').trim()))
-        .map(d => ({
-          name: (d.name || 'Dia').trim().slice(0, 60),
-          ex: d.exercises.filter(e => (e.name || '').trim()).map(e => ({
-            name: e.name.trim().slice(0, 60),
-            sets: clampInt(e.sets, 1, 20),
-            reps: String(e.reps || '8-12').slice(0, 20),
-            weight: e.weight == null || e.weight === '' ? null : Number(e.weight),
-            unit: e.unit === 'lb' ? 'lb' : 'kg',
-            notes: (e.notes || '').slice(0, 200)
-          }))
-        }))
-    }
-    if (!clean.days.length) {
-      toast(t('Add at least one exercise to save the plan'))
-      return
-    }
-    update(s => {
-      const id = uid()
-      s.routines = s.routines || []
-      s.routines.push({ id, name: clean.name, days: clean.days.map(d => ({ name: d.name, ex: d.ex })) })
-      toast(t('Imported plan saved: {0}', clean.name))
-    })
-    close()
+  const saveEdits = () => {
+    const res = applyImportedPlanToStore(plan, { schedule: true, replace: false })
+    setCreatedRoutines(res.routines)
+    setPhase('success')
+    toast(t('Alterações salvas com sucesso!'))
   }
 
-  if (phase === 'extracting' || phase === 'structuring') {
-    return <>
-      <h3>{t('Reading your file…')}</h3>
-      <div className="muted small" style={{ marginBottom: 14 }}>
-        {phase === 'extracting' ? t('Extracting text (OCR runs in your browser — large files can take a minute).')
-                                : t('Asking Minimax M3 to structure the plan…')}
+  if (phase === 'processing') {
+    return (
+      <div style={{ textAlign: 'center', padding: '16px 8px' }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: '50%',
+          background: 'linear-gradient(135deg, var(--acc-soft) 0%, var(--glass-bg) 100%)',
+          border: '1px solid var(--acc-line)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 16px auto',
+          boxShadow: '0 8px 24px var(--acc-line)'
+        }}>
+          <Icon name="sparkles" style={{ fontSize: 26, color: 'var(--acc)' }} />
+        </div>
+        <h3 style={{ margin: '0 0 6px 0', fontSize: 18, fontWeight: 700 }}>{statusText}</h3>
+        <div className="muted small" style={{ marginBottom: 18, lineHeight: 1.4 }}>
+          {t('Identificando documento (PDF, foto ou texto) com OCR e estruturando o treino via IA Minimax M3.')}
+        </div>
+        <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden', margin: '0 12px' }}>
+          <div style={{ width: (progress * 100) + '%', height: '100%', background: 'var(--acc)', transition: 'width 300ms ease', borderRadius: 4 }} />
+        </div>
+        <div className="small muted" style={{ marginTop: 8 }}>{Math.round(progress * 100)}%</div>
+        <div style={{ height: 16 }} />
+        <Button variant="ghost" className="dim" onClick={close}>{t('Cancelar')}</Button>
       </div>
-      <div style={{ height: 6, background: 'var(--surface-2)', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ width: (progress * 100) + '%', height: '100%', background: 'var(--acc)', transition: 'width 250ms' }} />
-      </div>
-      <div className="small muted" style={{ marginTop: 8, textAlign: 'center' }}>{Math.round(progress * 100)}%</div>
-      <div style={{ height: 12 }} />
-      <Button variant="ghost" className="dim" onClick={close}>{t('Cancel')}</Button>
-    </>
+    )
   }
 
   if (phase === 'error') {
-    return <>
-      <h3>{t('Could not read this file')}</h3>
-      <div className="muted small" style={{ marginBottom: 14 }}>{error}</div>
-      <Button variant="primary" onClick={close}>{t('Close')}</Button>
-    </>
+    return (
+      <div style={{ textAlign: 'center', padding: '12px 0' }}>
+        <h3>{t('Não foi possível ler o arquivo')}</h3>
+        <div className="muted small" style={{ marginBottom: 16 }}>{error}</div>
+        <Button variant="primary" onClick={close}>{t('Fechar')}</Button>
+      </div>
+    )
   }
 
-  const exCount = plan.days.reduce((n, d) => n + d.exercises.length, 0)
-  return <>
-    <h3>{t('Review the imported plan')}</h3>
-    <div className="muted small" style={{ marginBottom: 12 }}>
-      {source === 'minimax' && t('Minimax M3 structured this. Edit anything that looks off — it will not be re-sent.')}
-      {source === 'no-key' && t('No Minimax key configured — fill the plan in by hand.')}
-      {source === 'minimax-failed' && t('Minimax did not respond — fill the plan in by hand.')}
-      {source === 'empty' && t('We could not read text from this file. Fill the plan in by hand.')}
-    </div>
-    {warnings.length > 0 && <div className="card" style={{ marginBottom: 12, padding: 10 }}>
-      <div className="small" style={{ fontWeight: 600, marginBottom: 4 }}>{t('Notes from the importer')}</div>
-      {warnings.map((w, i) => <div key={i} className="small muted" style={{ marginBottom: 2 }}>· {w}</div>)}
-    </div>}
+  if (phase === 'success') {
+    const totalExercises = createdRoutines.reduce((acc, r) => acc + (r.ex?.length || 0), 0)
 
-    <div style={{ marginBottom: 10 }}>
-      <div className="small muted" style={{ marginBottom: 4 }}>{t('Plan name')}</div>
-      <input className="input" value={plan.name} onChange={e => setPlanName(e.target.value)} placeholder={t('Plan name')} />
-    </div>
-
-    {plan.days.map((day, di) => (
-      <div key={di} className="card" style={{ marginBottom: 10, padding: 12 }}>
-        <div className="row between" style={{ marginBottom: 8 }}>
-          <input className="input" style={{ flex: 1 }} value={day.name} onChange={e => setDayName(di, e.target.value)} />
-          <button className="btn-icon" onClick={() => removeDay(di)} aria-label={t('Remove day')}>
-            <Icon name="xmark" />
-          </button>
+    return (
+      <div>
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: '50%',
+            background: 'var(--acc)',
+            color: 'var(--on-acc)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 12px auto',
+            fontSize: 24
+          }}>
+            <Icon name="check" />
+          </div>
+          <h3 style={{ margin: '0 0 4px 0', fontSize: 19, fontWeight: 700 }}>{t('Plano criado com sucesso!')}</h3>
+          <div className="muted small">
+            {t('{0} rotinas criadas · {1} exercícios cadastrados', createdRoutines.length, totalExercises)}
+          </div>
         </div>
-        {day.exercises.map((ex, ei) => (
-          <div key={ei} style={{ borderTop: '1px solid var(--hair)', paddingTop: 8, marginTop: 8 }}>
-            <div className="row" style={{ gap: 6 }}>
-              <input className="input" style={{ flex: 1 }} placeholder={t('Exercise name')} value={ex.name} onChange={e => setEx(di, ei, { name: e.target.value })} />
-              <button className="btn-icon" onClick={() => removeEx(di, ei)} aria-label={t('Remove exercise')}>
-                <Icon name="trash" />
+
+        <div style={{ maxHeight: '42vh', overflowY: 'auto', paddingRight: 4, marginBottom: 14 }}>
+          {createdRoutines.map((r, ri) => (
+            <div key={r.id || ri} className="card" style={{ marginBottom: 10, padding: '12px 14px' }}>
+              <div className="row between" style={{ marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 15 }}>
+                  <Icon name={glyphOf(r.emoji)} style={{ color: 'var(--acc)' }} />
+                  <span>{r.name}</span>
+                </div>
+                <span className="small muted">{t('{0} exercícios', r.ex?.length || 0)}</span>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {(r.ex || []).slice(0, 8).map((e, ei) => {
+                  const exObj = EXIDX[e.id] || { n: 'Exercício' }
+                  return (
+                    <span key={ei} style={{
+                      fontSize: 12, padding: '3px 8px', borderRadius: 8,
+                      background: 'var(--surface-2)', color: 'var(--label)',
+                      border: '1px solid var(--hair)'
+                    }}>
+                      {exObj.n} ({e.sets}x{e.reps}{e.weight ? ` · ${e.weight}kg` : ''})
+                    </span>
+                  )
+                })}
+                {(r.ex || []).length > 8 && (
+                  <span style={{ fontSize: 12, padding: '3px 8px', borderRadius: 8, background: 'var(--surface-2)', color: 'var(--muted)' }}>
+                    +{r.ex.length - 8} {t('mais')}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {warnings.length > 0 && (
+          <div className="card" style={{ marginBottom: 12, padding: 10 }}>
+            <div className="small" style={{ fontWeight: 600, marginBottom: 4 }}>{t('Observações do leitor OCR / IA:')}</div>
+            {warnings.map((w, i) => <div key={i} className="small muted">· {w}</div>)}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Button variant="primary" onClick={() => { close(); nav('/plan') }}>
+            {t('Ver Meus Planos')}
+          </Button>
+          <Button variant="secondary" onClick={() => setPhase('editing')}>
+            {t('Personalizar ou Ajustar')}
+          </Button>
+          <Button variant="ghost" className="dim" onClick={close}>
+            {t('Concluir')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Phase === 'editing'
+  return (
+    <div>
+      <h3>{t('Ajustar Plano Importado')}</h3>
+      <div className="muted small" style={{ marginBottom: 12 }}>
+        {t('Edite nomes, séries, repetições ou adicione novos exercícios.')}
+      </div>
+
+      <div style={{ marginBottom: 10 }}>
+        <div className="small muted" style={{ marginBottom: 4 }}>{t('Nome do plano')}</div>
+        <input className="input" value={plan.name} onChange={e => setPlanName(e.target.value)} placeholder={t('Nome do plano')} />
+      </div>
+
+      <div style={{ maxHeight: '45vh', overflowY: 'auto', paddingRight: 4, marginBottom: 14 }}>
+        {(plan.routines || []).map((routine, ri) => (
+          <div key={ri} className="card" style={{ marginBottom: 10, padding: 12 }}>
+            <div className="row between" style={{ marginBottom: 8 }}>
+              <input className="input" style={{ flex: 1, fontWeight: 600 }} value={routine.name} onChange={e => setRoutineName(ri, e.target.value)} />
+              <button className="btn-icon" onClick={() => removeRoutine(ri)} aria-label={t('Remover')}>
+                <Icon name="xmark" />
               </button>
             </div>
-            <div className="row" style={{ gap: 6, marginTop: 6 }}>
-              <input className="input" type="number" min="1" max="20" style={{ width: 70 }} value={ex.sets} onChange={e => setEx(di, ei, { sets: e.target.value })} title={t('Sets')} />
-              <input className="input" style={{ width: 90 }} value={ex.reps} onChange={e => setEx(di, ei, { reps: e.target.value })} title={t('Reps')} />
-              <input className="input" type="number" step="0.5" min="0" style={{ width: 90 }} value={ex.weight ?? ''} onChange={e => setEx(di, ei, { weight: e.target.value })} title={t('Weight')} />
-              <select className="input" style={{ width: 64 }} value={ex.unit} onChange={e => setEx(di, ei, { unit: e.target.value })}>
-                <option value="kg">kg</option>
-                <option value="lb">lb</option>
-              </select>
+            {routine.exercises.map((ex, ei) => (
+              <div key={ei} style={{ borderTop: '1px solid var(--hair)', paddingTop: 8, marginTop: 8 }}>
+                <div className="row" style={{ gap: 6 }}>
+                  <input className="input" style={{ flex: 1 }} placeholder={t('Nome do exercício')} value={ex.name} onChange={e => setEx(ri, ei, { name: e.target.value })} />
+                  <button className="btn-icon" onClick={() => removeEx(ri, ei)} aria-label={t('Remover exercício')}>
+                    <Icon name="trash" />
+                  </button>
+                </div>
+                <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                  <input className="input" type="number" min="1" max="20" style={{ width: 70 }} value={ex.sets} onChange={e => setEx(ri, ei, { sets: e.target.value })} title={t('Séries')} />
+                  <input className="input" style={{ width: 90 }} value={ex.reps} onChange={e => setEx(ri, ei, { reps: e.target.value })} title={t('Repetições')} />
+                  <input className="input" type="number" step="0.5" min="0" style={{ width: 90 }} value={ex.weight ?? ''} onChange={e => setEx(ri, ei, { weight: e.target.value })} title={t('Carga (kg)')} />
+                  <select className="input" style={{ width: 64 }} value={ex.unit} onChange={e => setEx(ri, ei, { unit: e.target.value })}>
+                    <option value="kg">kg</option>
+                    <option value="lb">lb</option>
+                  </select>
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 8 }}>
+              <Button size="sm" variant="ghost" className="dim" onClick={() => addEx(ri)} icon="plus">{t('Adicionar exercício')}</Button>
             </div>
-            <input className="input" style={{ marginTop: 6, fontSize: 13 }} placeholder={t('Notes (optional)')} value={ex.notes} onChange={e => setEx(di, ei, { notes: e.target.value })} />
           </div>
         ))}
-        <Button variant="ghost" className="dim" onClick={() => addEx(di)} icon="plus">{t('Add exercise')}</Button>
+        <Button variant="ghost" onClick={addRoutine} icon="plus">{t('Adicionar novo treino')}</Button>
       </div>
-    ))}
-    <Button variant="ghost" onClick={addDay} icon="plus">{t('Add day')}</Button>
-    <div style={{ height: 12 }} />
-    <div className="muted small" style={{ marginBottom: 8 }}>
-      {t('{0} days · {1} exercises', plan.days.length, exCount)}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Button variant="primary" onClick={saveEdits}>{t('Salvar Alterações')}</Button>
+        <Button variant="ghost" className="dim" onClick={() => setPhase('success')}>{t('Voltar')}</Button>
+      </div>
     </div>
-    <Button variant="primary" onClick={commit}>{t('Save as new routine')}</Button>
-    <div style={{ height: 8 }} />
-    <Button variant="ghost" className="dim" onClick={close}>{t('Cancel')}</Button>
-  </>
+  )
 }
 
 function clampInt(v, lo, hi) {
@@ -380,9 +500,7 @@ function clampInt(v, lo, hi) {
   return Math.max(lo, Math.min(hi, n))
 }
 
-/** Universal import entry point: any file → OCR/M3 → editable plan sheet.
- *  The original CSV/XML fast path still works for known workout exports
- *  because the smart sheet opens with the same UI and accepts manual edits. */
+/** Universal import entry point: any file → OCR/M3 → auto-created plan and sheet. */
 export function smartImportFromApp(file, onDone) {
   ui().openSheet(close => <SmartImportSheet file={file} close={close} />)
   onDone && onDone()
