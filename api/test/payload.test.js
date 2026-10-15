@@ -50,8 +50,11 @@ test('review payload carries the plan, the window, effort and aggregates', () =>
 
 test('a stalling exercise shows up in the aggregates the way the engine counts it', () => {
   const S = sampleState();
+  const d1 = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+  const d2 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const d3 = new Date().toISOString().slice(0, 10);
   // Three sessions that all fell short of the 10-rep target.
-  S.workouts = ['2026-07-06', '2026-07-13', '2026-07-20'].map((d, i) => ({
+  S.workouts = [d1, d2, d3].map((d, i) => ({
     id: 'w' + i, d, name: 'A', start: 0, end: 60000, entries: [{
       id: '0001', target: { sets: 3, reps: 10, weight: 20 },
       sets: [{ w: 20, r: 9, done: true }, { w: 20, r: 8, done: true }, { w: 20, r: 7, done: true }]
@@ -65,8 +68,9 @@ test('a stalling exercise shows up in the aggregates the way the engine counts i
 
 test('a set that was never ticked off is a miss, not a gap', () => {
   const S = sampleState();
+  const today = new Date().toISOString().slice(0, 10);
   S.workouts = [{
-    id: 'w1', d: '2026-07-20', name: 'A', start: 0, end: 60000, entries: [{
+    id: 'w1', d: today, name: 'A', start: 0, end: 60000, entries: [{
       id: '0001', target: { sets: 3, reps: 10, weight: 20 },
       sets: [{ w: 20, r: 10, done: true }, { w: 20, r: 10, done: true }, { w: 20, r: 10, done: false }]
     }]

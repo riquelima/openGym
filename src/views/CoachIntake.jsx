@@ -58,7 +58,7 @@ export default function CoachIntake() {
   }))
   const set = patch => setP(v => ({ ...v, ...patch }))
 
-  if (!coachAvailable(config, user, { demo: DEMO, mobile: MOBILE })) { nav('/home', { replace: true }); return null }
+  if (!coachAvailable(config, user, { demo: DEMO || !user, mobile: MOBILE })) { nav('/home', { replace: true }); return null }
 
   const key = STEPS[step]
   const canNext = key !== 'goal' || (p.goal && p.experience)

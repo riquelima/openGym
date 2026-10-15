@@ -69,6 +69,16 @@ catch { vapid = webpush.generateVAPIDKeys(); fs.writeFileSync(vapidFile, JSON.st
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || (SECURE ? ORIGIN : 'mailto:admin@localhost');
 webpush.setVapidDetails(VAPID_SUBJECT, vapid.publicKey, vapid.privateKey);
 
+/* ---------- AI Coach default config ---------- */
+const coachConfigFile = path.join(DATA, 'coach.json');
+if (!fs.existsSync(coachConfigFile)) {
+  coachConfig.save({
+    enabled: true,
+    provider: 'minimax',
+    model: 'minimax-m3'
+  });
+}
+
 async function sendPush(userId, payload) {
   const subs = db.subs.filter(s => s.userId === userId);
   if (!subs.length) return;

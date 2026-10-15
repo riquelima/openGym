@@ -371,3 +371,38 @@ describe('validation', () => {
     expect(validateProposal({ changes: [change()] })).toBe(true)
   })
 })
+
+describe('Minimax AI Coach integration', () => {
+  it('generates coach plan with valid contract and routines', async () => {
+    const { demoPlan, demoStatus, demoDisclosure } = await import('./coach-demo.js')
+    const disc = demoDisclosure()
+    expect(disc.provider).toBe('minimax')
+    expect(disc.providerLabel).toContain('Minimax')
+
+    const s = state()
+    const intake = {
+      goal: 'hipertrofia',
+      daysPerWeek: 3,
+      preferredDays: [1, 3, 5],
+      sessionMin: 45,
+      equipment: ['dumbbell', 'barbell'],
+      limitations: 'nenhuma'
+    }
+    const res = demoPlan(s, intake)
+    expect(res.job).toBeDefined()
+    expect(res.job.state).toBe('running')
+
+    let done = false
+    for (let i = 0; i < 90; i++) {
+      await new Promise(r => setTimeout(r, 500))
+      const status = demoStatus()
+      if (status.pending) {
+        expect(status.pending.bundle).toBeDefined()
+        expect(status.pending.bundle.routines.length).toBeGreaterThan(0)
+        done = true
+        break
+      }
+    }
+    expect(done).toBe(true)
+  }, 45000)
+})

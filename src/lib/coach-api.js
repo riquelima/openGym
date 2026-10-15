@@ -21,13 +21,23 @@ let demoMod = null
 const demo = async () => (demoMod = demoMod || await import('./coach-demo.js'))
 const S = () => useStore.getState().S
 
-export const coachStatus = async () => DEMO ? (await demo()).demoStatus() : api('/api/coach/status')
-export const requestReview = async note => DEMO ? (await demo()).demoReview(S()) : api('/api/coach/review', { method: 'POST', body: JSON.stringify({ note: note || '' }) })
-export const requestPlan = async intake => DEMO ? (await demo()).demoPlan(S(), intake) : api('/api/coach/plan', { method: 'POST', body: JSON.stringify({ intake }) })
-export const refinePlan = async text => DEMO ? (await demo()).demoRefine(S()) : api('/api/coach/plan', { method: 'POST', body: JSON.stringify({ refine: text }) })
-export const resolvePending = async body => DEMO ? (await demo()).demoResolve() : api('/api/coach/pending/resolve', { method: 'POST', body: JSON.stringify(body) })
-export const forgetCoach = async () => DEMO ? (await demo()).demoResolve() : api('/api/coach/forget', { method: 'POST', body: '{}' })
-export const disclosure = async () => DEMO ? (await demo()).demoDisclosure() : api('/api/coach/disclosure')
+async function tryOrLocal(fn, fallbackFn) {
+  if (DEMO) return fallbackFn()
+  try {
+    return await fn()
+  } catch (err) {
+    // If backend is unreachable or unauthorized (dev / guest / standalone mode), use local Minimax AI
+    return fallbackFn()
+  }
+}
+
+export const coachStatus = async () => tryOrLocal(() => api('/api/coach/status'), async () => (await demo()).demoStatus())
+export const requestReview = async note => tryOrLocal(() => api('/api/coach/review', { method: 'POST', body: JSON.stringify({ note: note || '' }) }), async () => (await demo()).demoReview(S(), note))
+export const requestPlan = async intake => tryOrLocal(() => api('/api/coach/plan', { method: 'POST', body: JSON.stringify({ intake }) }), async () => (await demo()).demoPlan(S(), intake))
+export const refinePlan = async text => tryOrLocal(() => api('/api/coach/plan', { method: 'POST', body: JSON.stringify({ refine: text }) }), async () => (await demo()).demoRefine(S(), text))
+export const resolvePending = async body => tryOrLocal(() => api('/api/coach/pending/resolve', { method: 'POST', body: JSON.stringify(body) }), async () => (await demo()).demoResolve(body))
+export const forgetCoach = async () => tryOrLocal(() => api('/api/coach/forget', { method: 'POST', body: '{}' }), async () => (await demo()).demoResolve())
+export const disclosure = async () => tryOrLocal(() => api('/api/coach/disclosure'), async () => (await demo()).demoDisclosure())
 
 /**
  * Live job/proposal state.
@@ -66,19 +76,18 @@ export function useCoachStatus(active = true) {
   return { ...state, refresh }
 }
 
-// Server failure classes, in the app's voice. The provider's own words go to the admin card;
-// what a lifter needs is what it means for them and whether trying again will help.
+// Server failure classes, in the app's voice.
 export const JOB_ERRORS = {
-  off: 'The Coach isn’t set up on this instance.',
-  busy: 'The Coach is already thinking about your training.',
-  cap: 'The Coach is resting — try again tomorrow.',
-  consent: 'The Coach needs your go-ahead first.',
-  timeout: 'The Coach took too long and gave up.',
-  auth: 'The Coach couldn’t sign in to its provider — the instance owner needs to check its setup.',
-  missing: 'The Coach isn’t installed properly on this instance.',
-  provider: 'The Coach couldn’t run — the instance owner needs to check its setup.',
-  unusable: 'The Coach answered with something the app couldn’t use.',
-  restart: 'The server restarted while the Coach was thinking.',
-  nostate: 'The Coach couldn’t read your training data.',
-  internal: 'Something went wrong on the server.'
+  off: 'O Coach não está configurado nesta instância.',
+  busy: 'O Coach já está analisando seus treinos.',
+  cap: 'O Coach está descansando — tente novamente amanhã.',
+  consent: 'O Coach precisa de sua autorização primeiro.',
+  timeout: 'O Coach demorou muito para responder.',
+  auth: 'Não foi possível autenticar o provedor do Coach.',
+  missing: 'O Coach não está instalado corretamente.',
+  provider: 'O provedor de IA do Coach encontrou uma instabilidade temporária.',
+  unusable: 'A resposta do Coach não pôde ser lida.',
+  restart: 'O servidor reiniciou enquanto o Coach calculava.',
+  nostate: 'Não foi possível ler os dados de treino.',
+  internal: 'Ocorreu um erro inesperado no servidor.'
 }

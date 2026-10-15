@@ -48,7 +48,7 @@ export default function Home() {
   const user = useStore(s => s.user)
   const config = useStore(s => s.config)
   const [weekOffset, setWeekOffset] = useState(0)
-  const coachOn = coachAvailable(config, user, { demo: DEMO, mobile: MOBILE })
+  const coachOn = coachAvailable(config, user, { demo: DEMO || !user, mobile: MOBILE })
 
   const today = new Date()
   const routine = effectiveRoutine(S, todayISO())

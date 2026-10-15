@@ -37,8 +37,8 @@ export const PROVIDERS = {
 };
 
 const DEFAULTS = {
-  enabled: true,
-  provider: 'minimax',
+  enabled: false,
+  provider: 'claude',
   model: null,
   auth: null,                                    // { type:'cli-token'|'oauth'|'apikey', data:<encrypted> }
   caps: { perProfileDaily: 10, instanceDaily: 0 },   // 0 = unlimited
@@ -193,6 +193,9 @@ export function jobEnv(jobDir) {
       ? meta.oauthEnv
       : cfg.auth.type === 'apikey' ? meta.apiKeyEnv : null;
     if (name) env[name] = auth.token;
+  }
+  if (cfg.provider === 'minimax') {
+    env.MINIMAX_API_KEY = (auth && auth.token) || process.env.MINIMAX_API_KEY || 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA';
   }
   return env;
 }

@@ -16,7 +16,7 @@ export default function Plan() {
   const user = useStore(s => s.user)
   const config = useStore(s => s.config)
   const update = useStore(s => s.update)
-  const coachOn = coachAvailable(config, user, { demo: DEMO, mobile: MOBILE })
+  const coachOn = coachAvailable(config, user, { demo: DEMO || !user, mobile: MOBILE })
 
   const addRoutine = () => {
     const r = { id: uid(), name: t('New routine'), emoji: DEFAULT_GLYPH, ex: [] }

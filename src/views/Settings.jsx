@@ -167,7 +167,7 @@ export default function Settings() {
       </Row>
     </Section>
 
-    {coachAvailable(config, user, { demo: DEMO, mobile: MOBILE }) && (
+    {coachAvailable(config, user, { demo: DEMO || !user, mobile: MOBILE }) && (
       <Section title={t('Coach')} footer={hasConsent(S)
         ? t('The Coach designs and adjusts your plan; it never changes anything without your say-so.')
         : t('An AI coach that can build your plan and adjust it from what you log. Off until you turn it on.')}>

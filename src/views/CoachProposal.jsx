@@ -34,7 +34,7 @@ export default function CoachProposal() {
   const toast = useUI(s => s.toast)
   const { pending, loading, refresh } = useCoachStatus(true)
 
-  useEffect(() => { if (!coachAvailable(config, user, { demo: DEMO, mobile: MOBILE })) nav('/home', { replace: true }) }, [config, user])
+  useEffect(() => { if (!coachAvailable(config, user, { demo: DEMO || !user, mobile: MOBILE })) nav('/home', { replace: true }) }, [config, user])
   useEffect(() => { if (!loading && !pending) nav('/coach', { replace: true }) }, [loading, pending])
   if (!pending) return null
 
