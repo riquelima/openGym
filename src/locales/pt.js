@@ -830,5 +830,20 @@ export default {
   "Pectoralis Major Sternal Head": "Peitoral Inferior/Médio",
   "Upper Pectorals": "Peitoral Superior",
   "Lower Pectorals": "Peitoral Inferior",
-  "Leverage Machine": "Máquina de Alavanca"
+  "Leverage Machine": "Máquina de Alavanca",
+  "It's time to challenge your limits.": "É hora de desafiar seus limites.",
+  "Weekly Challenge": "Desafio da Semana",
+  "Recommendations": "Recomendações",
+  "See all": "Ver todos",
+  "Workout": "Treino",
+  "Progress": "Progresso",
+  "Routines": "Rotinas",
+  "Nutrition": "Nutrição",
+  "Community": "Comunidade",
+  "Strength Training Tips": "Dicas de Musculação",
+  "Upper Body": "Membros Superiores",
+  "Lower Body": "Membros Inferiores",
+  "Full Body": "Corpo Inteiro",
+  "Functional & Core": "Funcional & Core",
+  "exercises": "exercícios"
 }
