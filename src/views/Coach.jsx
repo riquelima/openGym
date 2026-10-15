@@ -46,8 +46,8 @@ export default function Coach() {
 
   // Gating lives in one predicate; if the instance isn't offering the Coach this route simply
   // isn't a place you can be.
-  useEffect(() => { if (!coachAvailable(config, user, { demo: DEMO || !user, mobile: MOBILE })) nav('/home', { replace: true }) }, [config, user])
-  if (!coachAvailable(config, user, { demo: DEMO || !user, mobile: MOBILE })) return null
+  useEffect(() => { if (!coachAvailable(config, user, { demo: true })) nav('/home', { replace: true }) }, [config, user])
+  if (!coachAvailable(config, user, { demo: true })) return null
 
   const consented = hasConsent(S)
   const coach = S.coach || emptyCoach()
