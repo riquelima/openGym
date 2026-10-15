@@ -289,10 +289,10 @@ function require_ui() {
 
 /* ============================ buttons ============================ */
 
-export function Button({ variant = 'plain', size, icon, trailingIcon, children, className = '', onClick, ...rest }) {
+export function Button({ variant = 'plain', size, icon, trailingIcon, children, className = '', onClick, danger, ...rest }) {
   return (
     <button
-      className={`btn ${variant}${size ? ' ' + size : ''} ${className}`}
+      className={`btn ${danger ? 'danger' : variant}${size ? ' ' + size : ''} ${className}`}
       onClick={e => {
         hapticLight()
         onClick?.(e)

@@ -21,7 +21,10 @@ export const DEF = {
   // bounds live in lib/coach.js.
   coach: null,
   // ExerciseDB V2 configuration (11,000+ exercises & HD videos via RapidAPI)
-  exercisedbApiKey: ''
+  exercisedbApiKey: '',
+  // Minimax M3 (used by the smart importer: OCR → M3 → routine). Optional — the
+  // import flow falls back to manual entry if empty or the API is unreachable.
+  minimaxApiKey: ''
 }
 const clone = o => JSON.parse(JSON.stringify(o))
 

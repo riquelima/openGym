@@ -29,50 +29,25 @@ export default function Plan() {
         <div className="sub">{t('Your weekly routine')}</div>
       </div>
       <div className="row" style={{ gap: 8 }}>
-        {coachOn && (
-          <button
-            className="btn sm"
-            style={{
-              background: 'linear-gradient(135deg, rgba(200, 255, 0, 0.2), rgba(200, 255, 0, 0.08))',
-              border: '1px solid var(--figma-lime)',
-              color: 'var(--figma-lime)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '7px 13px',
-              borderRadius: 14,
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: 'pointer',
-              boxShadow: '0 2px 10px rgba(200, 255, 0, 0.15)'
-            }}
-            onClick={() => nav('/coach')}
-            aria-label={t('Coach')}
-            title={t('Coach')}
-          >
-            <Icon name="sparkles" style={{ width: 16, height: 16 }} />
-            <span>{t('Coach')}</span>
-          </button>
-        )}
         <button className="iconbtn" onClick={planToolsSheet} aria-label={t('Share your plan')} title={t('Share your plan')}>
           <Icon name="upload" />
         </button>
       </div>
     </div>
 
-    {/* AI Coach Minimax Banner */}
+    {/* AI Coach Banner */}
     {coachOn && (
       <div
         style={{
           margin: '12px 0 18px 0',
           padding: '14px 16px',
           borderRadius: 18,
-          background: 'linear-gradient(135deg, rgba(200, 255, 0, 0.15) 0%, rgba(30, 30, 30, 0.9) 100%)',
-          border: '1px solid rgba(200, 255, 0, 0.35)',
+          background: 'linear-gradient(135deg, var(--acc-soft) 0%, var(--glass-bg) 100%)',
+          border: '1px solid var(--acc-line)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          boxShadow: '0 4px 18px rgba(0, 0, 0, 0.35)',
+          boxShadow: 'var(--glass-shadow)',
           cursor: 'pointer'
         }}
         onClick={() => nav(hasConsent(S) ? '/coach' : '/coach')}
@@ -83,29 +58,33 @@ export default function Plan() {
               width: 42,
               height: 42,
               borderRadius: 14,
-              background: 'var(--figma-lime)',
-              color: '#121212',
+              background: 'var(--acc)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0
+              flexShrink: 0,
+              overflow: 'hidden'
             }}
           >
-            <Icon name="sparkles" style={{ width: 22, height: 22 }} />
+            <img
+              src="https://cdn-icons-png.flaticon.com/512/16806/16806607.png"
+              alt="AI Coach"
+              style={{ width: 28, height: 28, objectFit: 'contain' }}
+            />
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#fff' }}>
-              {t('AI Coach Minimax')}
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--label)' }}>
+              {t('AI Coach')}
             </div>
-            <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.7)', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: 'var(--label-2)', marginTop: 2 }}>
               {S.routines.length ? t('Revisar rotinas e ajustar sobrecarga com IA') : t('Criar plano de treino personalizado com IA')}
             </div>
           </div>
         </div>
         <button
           style={{
-            background: 'var(--figma-lime)',
-            color: '#121212',
+            background: 'var(--acc)',
+            color: 'var(--on-acc)',
             border: 'none',
             padding: '7px 15px',
             borderRadius: 12,

@@ -186,11 +186,11 @@ export default function Home() {
       <div className="week">{strip}</div>
       <div className="today-row" onClick={onToday} style={{ marginTop: 10 }}>
         <div className="row" style={{ gap: 10, minWidth: 0 }}>
-          <span className="lrow-i" style={{ background: S.active ? 'var(--orange)' : routine ? 'var(--figma-lime)' : 'var(--surface-3)', color: (S.active || !routine) ? '#FFFFFF' : 'var(--figma-dark)' }}>
+          <span className="lrow-i" style={{ background: S.active ? 'var(--orange)' : routine ? 'var(--acc)' : 'var(--surface-3)', color: (S.active || !routine) ? '#FFFFFF' : 'var(--on-acc)' }}>
             <Icon name={S.active ? 'timer' : routine ? glyphOf(routine.emoji) : 'moon'} />
           </span>
           <div style={{ minWidth: 0 }}>
-            <div className="lbl2" style={{ fontFamily: 'var(--font-athletic)', color: 'var(--figma-lavender)' }}>{t('Today')}</div>
+            <div className="lbl2" style={{ fontFamily: 'var(--font-athletic)', color: 'var(--label-2)' }}>{t('Today')}</div>
             <div className="ttl" style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>{S.active ? t('{0} — in progress', S.active.name) : routine ? routine.name : t('Rest day')}{todayOvr && routine ? ' · ' + t('rescheduled') : ''}</div>
           </div>
         </div>
@@ -205,7 +205,7 @@ export default function Home() {
     {!S.routines.length && !S.active && (
       <div className="card">
         <div className="row" style={{ gap: 10, marginBottom: 6 }}>
-          <span className="lrow-i" style={{ background: 'var(--figma-violet)', color: '#fff' }}><Icon name="sparkles" /></span>
+          <span className="lrow-i" style={{ background: 'var(--acc)', color: 'var(--on-acc)' }}><Icon name="sparkles" /></span>
           <div className="big" style={{ fontSize: 22, fontFamily: 'var(--font-display)' }}>{t('Welcome!')}</div>
         </div>
         <div className="muted small" style={{ marginBottom: 14 }}>{t('Set up your weekly routine to get going — or load a ready-made Push / Pull / Legs plan.')}</div>
@@ -218,14 +218,14 @@ export default function Home() {
       </div>
     )}
 
-    {/* Figma Recommendations & Favorites Section */}
+    {/* Recommendations & Favorites Section */}
     <div style={{ marginTop: 22, marginBottom: 14 }}>
       <div className="row between" style={{ marginBottom: 12, padding: '0 4px' }}>
-        <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--figma-lime)', fontWeight: 600 }}>
+        <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--acc)', fontWeight: 600 }}>
           {t('Recommendations')}
         </h3>
         <button
-          style={{ color: '#FFFFFF', fontSize: 13, fontFamily: 'var(--font-athletic)', cursor: 'pointer', background: 'none', border: 'none' }}
+          style={{ color: 'var(--label-2)', fontSize: 13, fontFamily: 'var(--font-athletic)', cursor: 'pointer', background: 'none', border: 'none' }}
           onClick={() => nav('/plan')}
         >
           {t('See all')} →
@@ -235,9 +235,6 @@ export default function Home() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {recommendations.slice(0, 3).map(item => (
           <div key={item.id} className="figma-card" onClick={item.onClick}>
-            <span className="figma-star-btn">
-              <Icon name="starFill" />
-            </span>
             <div className="figma-card-info">
               <div>
                 <div className="figma-card-title">{item.title}</div>
@@ -264,7 +261,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="thumb thumb-x" style={{ width: 64, height: 64, borderRadius: 16 }}>
-                <Icon name="dumbbell" style={{ color: 'var(--figma-lime)' }} />
+                <Icon name="dumbbell" style={{ color: 'var(--acc)' }} />
               </div>
             )}
           </div>
@@ -307,7 +304,7 @@ export default function Home() {
       <div className="row between">
         <div>
           <div className="row" style={{ gap: 7, fontSize: 22, fontWeight: 600, letterSpacing: '-.021em' }}>
-            <Icon name="flame" style={{ color: 'var(--figma-lime)' }} />
+            <Icon name="flame" style={{ color: 'var(--acc)' }} />
             {t('{0} week streak', streakWeeks(S))}
           </div>
           <div className="muted small" style={{ marginTop: 2 }}>{wThisWeek}{plannedPerWeek ? ' / ' + plannedPerWeek : ''} {t('this week')} · {t(S.workouts.length === 1 ? '{0} workout total' : '{0} workouts total', S.workouts.length)}</div>

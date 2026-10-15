@@ -38,6 +38,17 @@ const EQUIPMENT = (() => {
   return Object.keys(count).sort((a, b) => count[b] - count[a]).slice(0, 14)
 })()
 
+// "Academia" is a convenience preset: picking it selects the full set of
+// equipment you'd typically find in a commercial gym. Toggling any of those
+// individual items off later drops the preset so the Coach stops assuming
+// "gym" is in play.
+const GYM_EQUIPMENT = [
+  'barbell', 'dumbbell', 'cable', 'machine', 'leverage machine', 'smith machine',
+  'ez barbell', 'kettlebell', 'medicine ball', 'stability ball', 'band',
+  'pull-up bar', 'weighted', 'body weight'
+]
+const isGymOn = equipment => GYM_EQUIPMENT.every(e => equipment.includes(e))
+
 const STEPS = ['goal', 'days', 'length', 'equipment', 'limits', 'extras']
 
 export default function CoachIntake() {
@@ -143,6 +154,23 @@ export default function CoachIntake() {
       {key === 'equipment' && <>
         <h2 style={{ marginTop: 0 }}>{t('What can you train with?')}</h2>
         <div className="muted small" style={{ marginBottom: 10 }}>{t('Pick everything you have access to. Leave it empty and the Coach will use the whole library.')}</div>
+        <div className="row" style={{ flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
+          <button
+            className={'chip' + (isGymOn(p.equipment) ? ' on' : '')}
+            onClick={() => {
+              if (isGymOn(p.equipment)) {
+                set({ equipment: p.equipment.filter(e => !GYM_EQUIPMENT.includes(e)) })
+              } else {
+                const merged = Array.from(new Set([...p.equipment, ...GYM_EQUIPMENT]))
+                set({ equipment: merged })
+              }
+            }}
+            style={{ textTransform: 'none' }}
+            title={t('Selects every piece of equipment a commercial gym typically has')}
+          >
+            🏋️ {t('Academia')}
+          </button>
+        </div>
         <div className="row" style={{ flexWrap: 'wrap', gap: 7 }}>
           {EQUIPMENT.map(e => <button key={e} className={'chip' + (p.equipment.includes(e) ? ' on' : '')}
             onClick={() => toggleEq(e)} style={{ textTransform: 'capitalize' }}>{e}</button>)}

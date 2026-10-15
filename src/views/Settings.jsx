@@ -29,6 +29,22 @@ export default function Settings() {
   const wakeOK = wakeLockSupported()
   const [apiKeyInput, setApiKeyInput] = useState(S.exercisedbApiKey || '')
   const [testingKey, setTestingKey] = useState(false)
+  const [minimaxKeyInput, setMinimaxKeyInput] = useState(S.minimaxApiKey || '')
+  const [testingMinimax, setTestingMinimax] = useState(false)
+  const saveMinimaxKey = async () => {
+    const key = minimaxKeyInput.trim()
+    update(s => { s.minimaxApiKey = key })
+    try { localStorage.setItem('minimax_api_key', key) } catch {}
+    if (!key) { toast(t('Minimax key removed')) ; return }
+    setTestingMinimax(true)
+    try {
+      const { testMinimaxConnection } = await import('../lib/minimax.js')
+      const r = await testMinimaxConnection(key)
+      toast(t('Minimax M3 connected ({0} chars response)', String(r.preview || '').length))
+    } catch (e) {
+      toast(t('Minimax key saved, but the test call failed: {0}', e?.message || 'unknown error'))
+    } finally { setTestingMinimax(false) }
+  }
 
   const saveAndTestKey = async () => {
     const key = apiKeyInput.trim()
@@ -126,7 +142,7 @@ export default function Settings() {
     {!user && !DEMO && !MOBILE && <p className="sect-f" style={{ marginTop: -18, marginBottom: 22 }}>{t('Guest mode — data lives only in this browser.')}</p>}
 
     {/* ---------- general ---------- */}
-    <Section title={t('General')} footer={t('Note: switching units only changes the label — logged numbers are not converted.')}>
+    <Section title={t('General')}>
       <SelectRow
         icon="globe" iconTint="var(--blue)" title={t('Language')}
         value={S.lang || 'en'} onChange={v => update(s => { s.lang = v })}
@@ -177,41 +193,35 @@ export default function Settings() {
       </Section>
     )}
 
-    {/* ---------- exercisedb api (11,000+ exercises & HD videos) ---------- */}
-    <Section
-      title="ExerciseDB API (11.000+ Exercícios)"
-      footer={t('Acesse 11.000+ exercícios com demonstrações em vídeo HD, biomecânica e variações. Obtenha sua chave gratuita em rapidapi.com/justin-WFnsXH_t6/api/exercisedb')}
-    >
-      <Row
-        icon="cloud"
-        iconTint="var(--acc)"
-        title={t('Base de Exercícios')}
-        subtitle={S.exercisedbApiKey ? t('Chave RapidAPI conectada (11.000+ exercícios ativos)') : t('Modo Demonstração (Exercícios em destaque com vídeo HD)')}
-      />
+    {(user || MOBILE) && <NotificationsCard S={S} update={update} toast={toast} />}
+
+    {/* ---------- minimax (M3) — used by the smart importer ---------- */}
+    <Section title={t('AI integrations')}>
       <div style={{ padding: '8px 16px 14px' }}>
-        <div className="small muted" style={{ marginBottom: 6 }}>{t('Chave RapidAPI (x-rapidapi-key)')}</div>
+        <div className="small muted" style={{ marginBottom: 6 }}>{t('Minimax M3 key (used to structure imported plans)')}</div>
         <div className="row" style={{ gap: 8 }}>
           <input
             type="password"
             className="input"
             style={{ flex: 1, fontFamily: 'monospace', fontSize: 13 }}
-            placeholder={t('Cole sua chave RapidAPI aqui…')}
-            value={apiKeyInput}
-            onChange={e => setApiKeyInput(e.target.value)}
+            placeholder={t('Paste your Minimax API key…')}
+            value={minimaxKeyInput}
+            onChange={e => setMinimaxKeyInput(e.target.value)}
           />
           <Button
             size="sm"
             variant="primary"
-            onClick={saveAndTestKey}
-            disabled={testingKey}
+            onClick={saveMinimaxKey}
+            disabled={testingMinimax}
           >
-            {testingKey ? t('Testando…') : t('Salvar & Testar')}
+            {testingMinimax ? t('Testing…') : t('Save')}
           </Button>
+        </div>
+        <div className="small muted" style={{ marginTop: 6 }}>
+          {S.minimaxApiKey ? t('Minimax key saved') : t('Without a key, imports fall back to manual entry.')}
         </div>
       </div>
     </Section>
-
-    {(user || MOBILE) && <NotificationsCard S={S} update={update} toast={toast} />}
 
     {/* ---------- appearance ---------- */}
     <Section title={t('Appearance')} footer={DEMO || MOBILE ? undefined : t('synced with your profile')}>
@@ -233,12 +243,36 @@ export default function Settings() {
         />
       </Row>
       <div className="lrow" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 12, paddingTop: 13, paddingBottom: 14 }}>
-        <span className="lrow-t">{t('Accent color')}</span>
+        <div className="row between" style={{ padding: '0 2px' }}>
+          <span className="lrow-t">{t('Accent color')}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--acc)', fontFamily: 'var(--font-athletic)' }}>
+            {ACCENTS[S.accent]?.name || 'Lima'}
+          </span>
+        </div>
         <div className="swatches">
-          {Object.entries(ACCENTS).map(([k, c]) => (
-            <button key={k} className={'swatch' + ((S.accent || 'lime') === k ? ' on' : '')}
-              style={{ background: c }} onClick={() => update(s => { s.accent = k })} aria-label={k} />
-          ))}
+          {Object.entries(ACCENTS).filter(([k]) => k !== 'lavender').map(([k, c]) => {
+            const hex = typeof c === 'string' ? c : (S.theme === 'light' ? c.light : c.dark)
+            const label = typeof c === 'object' && c.name ? c.name : k
+            const isSelected = (S.accent || 'lime') === k
+            const isLightAcc = ['lime', 'gold', 'amber', 'cyan'].includes(k) && S.theme !== 'light'
+            return (
+              <button
+                key={k}
+                type="button"
+                className={'swatch' + (isSelected ? ' on' : '')}
+                style={{ background: hex }}
+                onClick={() => update(s => { s.accent = k })}
+                aria-label={label}
+                title={label}
+              >
+                {isSelected && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isLightAcc ? '#000' : '#fff'} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', margin: 'auto' }}>
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
     </Section>
@@ -261,16 +295,11 @@ export default function Settings() {
       onChange={ev => { const f = ev.target.files[0]; if (f) importFromApp(f); ev.target.value = '' }} />
 
     {/* "Add to Home screen" makes no sense inside the native app */}
-    {!MOBILE && <Section title={t('Tip')}>
+    {!MOBILE && <div style={{ marginTop: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
       <Row icon="lightbulb" iconTint="var(--yellow)"
         title={IS_ANDROID ? t('In Chrome: ⋮ menu → Add to Home screen') : t('In Safari: Share → Add to Home Screen')}
         subtitle={t('to install openGym as a full-screen app.') + ' ' + (user ? t('Your data syncs with your profile — sign in anywhere to see it.') : t('Guest data stays on this device — export a backup now and then!'))} />
-    </Section>}
-
-    <div className="dim small" style={{ textAlign: 'center', marginTop: 4, lineHeight: 1.6 }}>
-      openGym · {t('free & open source (AGPL v3)')}<br />
-      <a href="https://github.com/DuarteSantos8/openGym" target="_blank" rel="noopener">source code</a> · exercise data: hasaneyldrm/exercises-dataset (CC)
-    </div>
+    </div>}
   </div>
 }
 

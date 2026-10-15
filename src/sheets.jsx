@@ -17,6 +17,7 @@ import { glyphOf, GLYPH_GROUPS, DEFAULT_GLYPH } from './lib/glyphs.js'
 import BodyMap from './components/BodyMap.jsx'
 import { loadOfWorkouts } from './lib/muscles.js'
 import { parseImport, mergeImport } from './lib/import-csv.js'
+import { extractText, structurePlan } from './lib/importer.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC } from './lib/progression.js'
@@ -206,6 +207,187 @@ function ImportSummary({ parsed, close }) {
   </>
 }
 
+/* ============================ smart import (any file → plan) ========================= */
+// Shows up when the user taps "Import from another app". Runs the OCR/M3
+// pipeline asynchronously and lets the user review/edit the result before
+// it becomes a routine. Designed to never leave the user staring at a frozen
+// screen: every step has a progress bar, a warning list, and a "fill in
+// manually" fallback if the structure step produced nothing usable.
+function SmartImportSheet({ file, close }) {
+  const [phase, setPhase] = useState('extracting') // extracting | structuring | ready | error
+  const [progress, setProgress] = useState(0)
+  const [text, setText] = useState('')
+  const [warnings, setWarnings] = useState([])
+  const [plan, setPlan] = useState({ name: 'Plano importado', days: [] })
+  const [source, setSource] = useState('')
+  const [error, setError] = useState(null)
+  const ran = useRef(false)
+
+  useEffect(() => {
+    if (ran.current) return
+    ran.current = true
+    ;(async () => {
+      try {
+        const { text, warnings } = await extractText(file, p => setProgress(Math.min(0.5, p || 0)))
+        setText(text); setWarnings(warnings)
+        setPhase('structuring'); setProgress(0.5)
+        const { plan, source, error } = await structurePlan(text, { onProgress: setProgress })
+        setPlan(plan); setSource(source); setError(error || null)
+        setPhase('ready')
+      } catch (e) {
+        setError(e?.message || String(e))
+        setPhase('error')
+      }
+    })()
+  }, [file])
+
+  // Editable plan state — the user can fix names, add/remove sets, tweak weight.
+  const setPlanName = n => setPlan(p => ({ ...p, name: n }))
+  const setDayName = (di, n) => setPlan(p => ({ ...p, days: p.days.map((d, i) => i === di ? { ...d, name: n } : d) }))
+  const addDay = () => setPlan(p => ({ ...p, days: [...p.days, { name: `Dia ${p.days.length + 1}`, exercises: [] }] }))
+  const removeDay = di => setPlan(p => ({ ...p, days: p.days.filter((_, i) => i !== di) }))
+  const setEx = (di, ei, patch) => setPlan(p => ({
+    ...p,
+    days: p.days.map((d, i) => i === di ? { ...d, exercises: d.exercises.map((e, j) => j === ei ? { ...e, ...patch } : e) } : d)
+  }))
+  const addEx = di => setPlan(p => ({
+    ...p,
+    days: p.days.map((d, i) => i === di ? { ...d, exercises: [...d.exercises, { name: '', sets: 3, reps: '8-12', weight: null, unit: 'kg', notes: '' }] } : d)
+  }))
+  const removeEx = (di, ei) => setPlan(p => ({
+    ...p,
+    days: p.days.map((d, i) => i === di ? { ...d, exercises: d.exercises.filter((_, j) => j !== ei) } : d)
+  }))
+
+  const commit = () => {
+    const clean = {
+      name: (plan.name || 'Plano importado').trim().slice(0, 60),
+      days: plan.days
+        .filter(d => d.exercises.some(e => (e.name || '').trim()))
+        .map(d => ({
+          name: (d.name || 'Dia').trim().slice(0, 60),
+          ex: d.exercises.filter(e => (e.name || '').trim()).map(e => ({
+            name: e.name.trim().slice(0, 60),
+            sets: clampInt(e.sets, 1, 20),
+            reps: String(e.reps || '8-12').slice(0, 20),
+            weight: e.weight == null || e.weight === '' ? null : Number(e.weight),
+            unit: e.unit === 'lb' ? 'lb' : 'kg',
+            notes: (e.notes || '').slice(0, 200)
+          }))
+        }))
+    }
+    if (!clean.days.length) {
+      toast(t('Add at least one exercise to save the plan'))
+      return
+    }
+    update(s => {
+      const id = uid()
+      s.routines = s.routines || []
+      s.routines.push({ id, name: clean.name, days: clean.days.map(d => ({ name: d.name, ex: d.ex })) })
+      toast(t('Imported plan saved: {0}', clean.name))
+    })
+    close()
+  }
+
+  if (phase === 'extracting' || phase === 'structuring') {
+    return <>
+      <h3>{t('Reading your file…')}</h3>
+      <div className="muted small" style={{ marginBottom: 14 }}>
+        {phase === 'extracting' ? t('Extracting text (OCR runs in your browser — large files can take a minute).')
+                                : t('Asking Minimax M3 to structure the plan…')}
+      </div>
+      <div style={{ height: 6, background: 'var(--surface-2)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ width: (progress * 100) + '%', height: '100%', background: 'var(--acc)', transition: 'width 250ms' }} />
+      </div>
+      <div className="small muted" style={{ marginTop: 8, textAlign: 'center' }}>{Math.round(progress * 100)}%</div>
+      <div style={{ height: 12 }} />
+      <Button variant="ghost" className="dim" onClick={close}>{t('Cancel')}</Button>
+    </>
+  }
+
+  if (phase === 'error') {
+    return <>
+      <h3>{t('Could not read this file')}</h3>
+      <div className="muted small" style={{ marginBottom: 14 }}>{error}</div>
+      <Button variant="primary" onClick={close}>{t('Close')}</Button>
+    </>
+  }
+
+  const exCount = plan.days.reduce((n, d) => n + d.exercises.length, 0)
+  return <>
+    <h3>{t('Review the imported plan')}</h3>
+    <div className="muted small" style={{ marginBottom: 12 }}>
+      {source === 'minimax' && t('Minimax M3 structured this. Edit anything that looks off — it will not be re-sent.')}
+      {source === 'no-key' && t('No Minimax key configured — fill the plan in by hand.')}
+      {source === 'minimax-failed' && t('Minimax did not respond — fill the plan in by hand.')}
+      {source === 'empty' && t('We could not read text from this file. Fill the plan in by hand.')}
+    </div>
+    {warnings.length > 0 && <div className="card" style={{ marginBottom: 12, padding: 10 }}>
+      <div className="small" style={{ fontWeight: 600, marginBottom: 4 }}>{t('Notes from the importer')}</div>
+      {warnings.map((w, i) => <div key={i} className="small muted" style={{ marginBottom: 2 }}>· {w}</div>)}
+    </div>}
+
+    <div style={{ marginBottom: 10 }}>
+      <div className="small muted" style={{ marginBottom: 4 }}>{t('Plan name')}</div>
+      <input className="input" value={plan.name} onChange={e => setPlanName(e.target.value)} placeholder={t('Plan name')} />
+    </div>
+
+    {plan.days.map((day, di) => (
+      <div key={di} className="card" style={{ marginBottom: 10, padding: 12 }}>
+        <div className="row between" style={{ marginBottom: 8 }}>
+          <input className="input" style={{ flex: 1 }} value={day.name} onChange={e => setDayName(di, e.target.value)} />
+          <button className="btn-icon" onClick={() => removeDay(di)} aria-label={t('Remove day')}>
+            <Icon name="xmark" />
+          </button>
+        </div>
+        {day.exercises.map((ex, ei) => (
+          <div key={ei} style={{ borderTop: '1px solid var(--hair)', paddingTop: 8, marginTop: 8 }}>
+            <div className="row" style={{ gap: 6 }}>
+              <input className="input" style={{ flex: 1 }} placeholder={t('Exercise name')} value={ex.name} onChange={e => setEx(di, ei, { name: e.target.value })} />
+              <button className="btn-icon" onClick={() => removeEx(di, ei)} aria-label={t('Remove exercise')}>
+                <Icon name="trash" />
+              </button>
+            </div>
+            <div className="row" style={{ gap: 6, marginTop: 6 }}>
+              <input className="input" type="number" min="1" max="20" style={{ width: 70 }} value={ex.sets} onChange={e => setEx(di, ei, { sets: e.target.value })} title={t('Sets')} />
+              <input className="input" style={{ width: 90 }} value={ex.reps} onChange={e => setEx(di, ei, { reps: e.target.value })} title={t('Reps')} />
+              <input className="input" type="number" step="0.5" min="0" style={{ width: 90 }} value={ex.weight ?? ''} onChange={e => setEx(di, ei, { weight: e.target.value })} title={t('Weight')} />
+              <select className="input" style={{ width: 64 }} value={ex.unit} onChange={e => setEx(di, ei, { unit: e.target.value })}>
+                <option value="kg">kg</option>
+                <option value="lb">lb</option>
+              </select>
+            </div>
+            <input className="input" style={{ marginTop: 6, fontSize: 13 }} placeholder={t('Notes (optional)')} value={ex.notes} onChange={e => setEx(di, ei, { notes: e.target.value })} />
+          </div>
+        ))}
+        <Button variant="ghost" className="dim" onClick={() => addEx(di)} icon="plus">{t('Add exercise')}</Button>
+      </div>
+    ))}
+    <Button variant="ghost" onClick={addDay} icon="plus">{t('Add day')}</Button>
+    <div style={{ height: 12 }} />
+    <div className="muted small" style={{ marginBottom: 8 }}>
+      {t('{0} days · {1} exercises', plan.days.length, exCount)}
+    </div>
+    <Button variant="primary" onClick={commit}>{t('Save as new routine')}</Button>
+    <div style={{ height: 8 }} />
+    <Button variant="ghost" className="dim" onClick={close}>{t('Cancel')}</Button>
+  </>
+}
+
+function clampInt(v, lo, hi) {
+  const n = parseInt(v, 10)
+  if (!Number.isFinite(n)) return lo
+  return Math.max(lo, Math.min(hi, n))
+}
+
+/** Universal import entry point: any file → OCR/M3 → editable plan sheet.
+ *  The original CSV/XML fast path still works for known workout exports
+ *  because the smart sheet opens with the same UI and accepts manual edits. */
+export function smartImportFromApp(file, onDone) {
+  ui().openSheet(close => <SmartImportSheet file={file} close={close} />)
+  onDone && onDone()
+}
+
 /** Read a CSV/XML export, then show what it would do. */
 export function importFromApp(file, onDone) {
   const rd = new FileReader()
@@ -275,9 +457,60 @@ function OneRM({ ex }) {
       <span className="muted small">{t('Estimate')}</span>
       <b className="accent" style={{ fontSize: 20 }}>{est === null ? '—' : fmtNum(est) + ' ' + st.unit}</b>
     </div>
-    <div className="small dim">{est === null
-      ? t('Enter a weight and 1–{0} reps — beyond that an estimate is guesswork.', REP_CAP)
-      : t('Epley formula — a calculation from one set, not a tested max.')}</div>
+  </>
+}
+
+/* "How to" block: always shows Portuguese (Brazil) instructions. If the
+ * exercise has a Portuguese instruction pack we use it directly; otherwise
+ * we translate the English pack on the fly via Minimax M3 (cache per session). */
+const _instrCache = new Map()
+function HowToBlock({ ex }) {
+  const lang = getLang()
+  const base = instrFor(ex) || [] // EN when current language has no pack
+  const hasPtPack = INSTR_LANGS.includes(lang) && lang === 'pt'
+  const [steps, setSteps] = useState(hasPtPack ? base : [])
+  const [loading, setLoading] = useState(!hasPtPack && base.length > 0)
+  const cacheKey = ex.id + '|' + lang
+
+  useEffect(() => {
+    if (hasPtPack) { setSteps(base); setLoading(false); return }
+    if (!base.length) { setLoading(false); return }
+    if (_instrCache.has(cacheKey)) { setSteps(_instrCache.get(cacheKey)); setLoading(false); return }
+    let cancelled = false
+    ;(async () => {
+      const key = (useStore.getState().S.minimaxApiKey || '').trim()
+      if (!key) { setLoading(false); return } // no key → fall back to English, which is base
+      try {
+        const res = await fetch('https://api.minimaxi.chat/v1/text/chatcompletion_v2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+          body: JSON.stringify({
+            model: 'MiniMax-M3',
+            temperature: 0.1,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: 'Você traduz passos de execução de exercícios para português do Brasil. Devolva APENAS JSON: {"steps":["...","..."]}. Preserve a ordem e o sentido técnico. Use "você" como pronome.' },
+              { role: 'user', content: JSON.stringify({ steps: base }) }
+            ]
+          })
+        })
+        if (!res.ok) throw new Error('HTTP ' + res.status)
+        const data = await res.json()
+        const text = data?.choices?.[0]?.message?.content || ''
+        const m = text.match(/\{[\s\S]*\}/)
+        const parsed = m ? JSON.parse(m[0]) : null
+        const out = Array.isArray(parsed?.steps) && parsed.steps.length === base.length ? parsed.steps : base
+        if (!cancelled) { _instrCache.set(cacheKey, out); setSteps(out); setLoading(false) }
+      } catch { if (!cancelled) { setSteps(base); setLoading(false) } }
+    })()
+    return () => { cancelled = true }
+  }, [cacheKey, hasPtPack, base])
+
+  if (!base.length) return null
+  return <>
+    <h4 className="sec">{t('How to')}</h4>
+    {loading ? <div className="small muted" style={{ marginBottom: 6 }}>{t('Translating instructions…')}</div>
+             : <ol className="steps-list">{steps.map((s, i) => <li key={i}>{s}</li>)}</ol>}
   </>
 }
 
@@ -344,7 +577,7 @@ function ExerciseDetail({ ex, close }) {
       <Button variant="danger" icon="trash" style={{ flex: 1 }} onClick={() => deleteCustomEx(ex, close)}>{t('Delete')}</Button>
     </div>}
     {!isCardio(ex) && <OneRM ex={ex} />}
-    {instrFor(ex).length > 0 &&<><h4 className="sec">{t('How to')}{!INSTR_LANGS.includes(getLang()) && <span className="dim" style={{ textTransform: 'none', letterSpacing: 0 }}> · {t('instructions in English')}</span>}</h4><ol className="steps-list">{instrFor(ex).map((s, i) => <li key={i}>{s}</li>)}</ol></>}
+    {instrFor(ex).length > 0 && <HowToBlock ex={ex} />}
   </>
 }
 export const exerciseDetailSheet = ex => ui().openSheet(close => <ExerciseDetail ex={ex} close={close} />)

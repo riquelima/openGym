@@ -44,4 +44,22 @@ export function weekKey(d) {
 export const localTZ = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { return 'UTC' } }
 
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
-export const ACCENTS = { lime: '#E2F163', violet: '#896CFE', lavender: '#B3A0FF', sky: '#0a84ff', orange: '#ff9f0a', pink: '#ff375f', red: '#ff453a', teal: '#40c8e0', gold: '#ffd60a' }
+export const ACCENTS = {
+  lime: { dark: '#E2F163', light: '#16A34A', name: 'Lima' },
+  emerald: { dark: '#10B981', light: '#059669', name: 'Esmeralda' },
+  teal: { dark: '#2DD4BF', light: '#0D9488', name: 'Verde Água' },
+  cyan: { dark: '#00E5FF', light: '#0284C7', name: 'Ciano' },
+  sky: { dark: '#38BDF8', light: '#0284C7', name: 'Celeste' },
+  blue: { dark: '#3B82F6', light: '#2563EB', name: 'Azul' },
+  indigo: { dark: '#818CF8', light: '#4F46E5', name: 'Índigo' },
+  violet: { dark: '#896CFE', light: '#7C3AED', name: 'Violeta' },
+  purple: { dark: '#C084FC', light: '#9333EA', name: 'Roxo' },
+  fuchsia: { dark: '#F43F5E', light: '#E11D48', name: 'Fúcsia' },
+  pink: { dark: '#FF375F', light: '#E11D48', name: 'Rosa' },
+  rose: { dark: '#FB7185', light: '#BE123C', name: 'Rose' },
+  red: { dark: '#EF4444', light: '#DC2626', name: 'Vermelho' },
+  orange: { dark: '#FF7A00', light: '#EA580C', name: 'Laranja' },
+  amber: { dark: '#FBBF24', light: '#D97706', name: 'Âmbar' },
+  gold: { dark: '#FCD34D', light: '#B45309', name: 'Dourado' },
+  lavender: { dark: '#896CFE', light: '#7C3AED', name: 'Lavanda' }
+}
