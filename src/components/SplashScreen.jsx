@@ -5,7 +5,7 @@ import { t } from '../lib/i18n.js'
 export default function SplashScreen({ ready = false, onFinish }) {
   const [progress, setProgress] = useState(0)
   const [exiting, setExiting] = useState(false)
-  const [statusText, setStatusText] = useState(t('Iniciando openGym...'))
+  const [statusText, setStatusText] = useState(t('Iniciando OpenWorkout...'))
   const finishedRef = useRef(false)
 
   // Smooth cinematic progress counter
@@ -20,7 +20,7 @@ export default function SplashScreen({ ready = false, onFinish }) {
       setProgress(Math.floor(current))
 
       if (current < 30) {
-        setStatusText(t('Iniciando openGym...'))
+        setStatusText(t('Iniciando OpenWorkout...'))
       } else if (current < 65) {
         setStatusText(t('Carregando treinos e rotinas...'))
       } else if (current < 90) {
@@ -145,8 +145,8 @@ export default function SplashScreen({ ready = false, onFinish }) {
         {/* Brand Name & Tagline */}
         <div className="splash-brand">
           <h1 className="splash-title">
-            <span className="splash-title-open">open</span>
-            <span className="splash-title-gym">Gym</span>
+            <span className="splash-title-open">Open</span>
+            <span className="splash-title-gym">Workout</span>
           </h1>
           <p className="splash-tagline">
             {t('Treine com consistência • Evolua sempre')}
