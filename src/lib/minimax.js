@@ -1,13 +1,16 @@
-// Thin re-export so Settings.jsx can lazy-import just the test call without
-// pulling in the (much larger) importer. Kept separate from importer.js so
-// the key-test path stays small and dependency-free.
+// Minimax M3 client. The API key is baked in here on purpose: this app is
+// distributed as a single bundle and the AI features are part of the product,
+// not an opt-in per user. Rotating the key means editing this file.
 const MINIMAX_URL = 'https://api.minimaxi.chat/v1/text/chatcompletion_v2'
 const MINIMAX_MODEL = 'MiniMax-M3'
+const MINIMAX_KEY = 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
 
-export async function testMinimaxConnection(key) {
+export const getMinimaxKey = () => MINIMAX_KEY
+
+export async function testMinimaxConnection() {
   const res = await fetch(MINIMAX_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MINIMAX_KEY}` },
     body: JSON.stringify({
       model: MINIMAX_MODEL,
       messages: [{ role: 'user', content: 'responda apenas: ok' }],

@@ -602,7 +602,8 @@ function HowToBlock({ ex }) {
     if (_instrCache.has(cacheKey)) { setSteps(_instrCache.get(cacheKey)); setLoading(false); return }
     let cancelled = false
     ;(async () => {
-      const key = (useStore.getState().S.minimaxApiKey || '').trim()
+      const { getMinimaxKey } = await import('./lib/minimax.js')
+      const key = getMinimaxKey()
       if (!key) { setLoading(false); return } // no key → fall back to English, which is base
       try {
         const res = await fetch('https://api.minimaxi.chat/v1/text/chatcompletion_v2', {

@@ -7,8 +7,8 @@ import {
   pickRoutineEmoji,
   guessBodyPart,
   guessEquipment,
-  DEFAULT_MINIMAX_KEY
 } from './importer.js'
+import { getMinimaxKey } from './minimax.js'
 import { useStore, DEF } from '../store/useStore.js'
 
 describe('importer.js', () => {
@@ -16,8 +16,9 @@ describe('importer.js', () => {
     useStore.setState({ S: JSON.parse(JSON.stringify(DEF)) })
   })
 
-  it('exposes the user Minimax default key', () => {
-    expect(DEFAULT_MINIMAX_KEY).toBe('sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA')
+  it('exposes a Minimax key from the minimax module', () => {
+    expect(typeof getMinimaxKey()).toBe('string')
+    expect(getMinimaxKey().length).toBeGreaterThan(20)
   })
 
   it('normalizes plans with routines or days gracefully', () => {

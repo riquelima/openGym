@@ -22,22 +22,15 @@ export const DEF = {
   // bounds live in lib/coach.js.
   coach: null,
   // ExerciseDB V2 configuration (11,000+ exercises & HD videos via RapidAPI)
-  exercisedbApiKey: '',
-  // Minimax M3 (used by the smart importer: OCR → M3 → routine).
-  minimaxApiKey: 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
+  exercisedbApiKey: ''
 }
 const clone = o => JSON.parse(JSON.stringify(o))
-
-export const DEFAULT_MINIMAX_KEY = 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
 
 function loadState() {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const merged = Object.assign(clone(DEF), JSON.parse(raw))
-      if (!merged.minimaxApiKey || !merged.minimaxApiKey.trim()) {
-        merged.minimaxApiKey = DEFAULT_MINIMAX_KEY
-      }
       try {
         const healed = healCustomExercises(merged)
         if (healed) {

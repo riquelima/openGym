@@ -130,7 +130,7 @@ export default function Home() {
     {/* Figma Header Greeting */}
     <div className="hdr">
       <div>
-        <h1>{user ? t('Hi {0}', user.name) : 'openGym'}</h1>
+        <h1>{user ? t('Hi {0}', user.name) : 'Open Workout'}</h1>
         <div className="sub">{t("It's time to challenge your limits.")}</div>
       </div>
       <button className="iconbtn" onClick={() => nav('/settings')} aria-label={t('Settings')}>

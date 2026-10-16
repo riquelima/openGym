@@ -4,9 +4,9 @@
 
 import { EXDB, EXIDX, registerCustom } from './exercises.js'
 import { FEATURED_EXERCISEDB_EXERCISES, isExerciseDBConfigured, searchExerciseDB } from './exercisedb-api.js'
+import { getMinimaxKey } from './minimax.js'
 import { uid } from './format.js'
 
-export const DEFAULT_MINIMAX_KEY = 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
 const MINIMAX_URL = 'https://api.minimaxi.chat/v1/text/chatcompletion_v2'
 
 // Verified fallback archetypes with working demonstrations for every bodypart
@@ -315,7 +315,7 @@ export function matchCatalogExercise(query) {
  */
 export async function resolveExerciseWithMinimax(rawName, apiKey) {
   try {
-    const key = apiKey || DEFAULT_MINIMAX_KEY
+    const key = apiKey || getMinimaxKey()
     if (!key) return null
     const res = await fetch(MINIMAX_URL, {
       method: 'POST',
@@ -454,7 +454,7 @@ export async function resolvePlanExercisesAsync(plan, storeState) {
   if (!plan || (!plan.routines && !plan.days)) return plan
 
   const routines = plan.routines || plan.days || []
-  const minimaxKey = storeState?.minimaxApiKey || DEFAULT_MINIMAX_KEY
+  const minimaxKey = storeState?.minimaxApiKey || getMinimaxKey()
 
   for (const routine of routines) {
     const rawExercises = routine.exercises || routine.ex || []

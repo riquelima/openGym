@@ -28,25 +28,7 @@ export default function Settings() {
   const importRef = useRef(null)
   const wakeOK = wakeLockSupported()
   const [apiKeyInput, setApiKeyInput] = useState(S.exercisedbApiKey || '')
-  const [testingKey, setTestingKey] = useState(false)
-  const [minimaxKeyInput, setMinimaxKeyInput] = useState(
-    S.minimaxApiKey || 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
-  )
-  const [testingMinimax, setTestingMinimax] = useState(false)
-  const saveMinimaxKey = async () => {
-    const key = minimaxKeyInput.trim()
-    update(s => { s.minimaxApiKey = key })
-    try { localStorage.setItem('minimax_api_key', key) } catch {}
-    if (!key) { toast(t('Minimax key removed')) ; return }
-    setTestingMinimax(true)
-    try {
-      const { testMinimaxConnection } = await import('../lib/minimax.js')
-      const r = await testMinimaxConnection(key)
-      toast(t('Minimax M3 connected ({0} chars response)', String(r.preview || '').length))
-    } catch (e) {
-      toast(t('Minimax key saved, but the test call failed: {0}', e?.message || 'unknown error'))
-    } finally { setTestingMinimax(false) }
-  }
+ 
 
   const saveAndTestKey = async () => {
     const key = apiKeyInput.trim()
@@ -222,34 +204,6 @@ export default function Settings() {
 
     {(user || MOBILE) && <NotificationsCard S={S} update={update} toast={toast} />}
 
-    {/* ---------- minimax (M3) — used by the smart importer ---------- */}
-    <Section title={t('AI integrations')}>
-      <div style={{ padding: '8px 16px 14px' }}>
-        <div className="small muted" style={{ marginBottom: 6 }}>{t('Minimax M3 key (used to structure imported plans)')}</div>
-        <div className="row" style={{ gap: 8 }}>
-          <input
-            type="password"
-            className="input"
-            style={{ flex: 1, fontFamily: 'monospace', fontSize: 13 }}
-            placeholder={t('Paste your Minimax API key…')}
-            value={minimaxKeyInput}
-            onChange={e => setMinimaxKeyInput(e.target.value)}
-          />
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={saveMinimaxKey}
-            disabled={testingMinimax}
-          >
-            {testingMinimax ? t('Testing…') : t('Save')}
-          </Button>
-        </div>
-        <div className="small muted" style={{ marginTop: 6 }}>
-          {S.minimaxApiKey ? t('Minimax key saved') : t('Without a key, imports fall back to manual entry.')}
-        </div>
-      </div>
-    </Section>
-
     {/* ---------- appearance ---------- */}
     <Section title={t('Appearance')} footer={DEMO || MOBILE ? undefined : t('synced with your profile')}>
       <Row icon="moon" iconTint="var(--indigo)" title={t('Theme')}>
@@ -307,8 +261,8 @@ export default function Settings() {
     {/* ---------- data: fill it, bring things over, back it up, wipe it ---------- */}
     <Section title={t('Data')}>
       <Row icon="sparkles" iconTint="var(--acc)" title={t('Load starter plan (PPL)')} accessory="chevron" onClick={loadStarterPlan} />
-      <Row icon="shuffle" iconTint="var(--teal)" title={t('Import from another app')}
-        subtitle={t('FitNotes, Strong, Hevy — or body weight from Apple Health')}
+      <Row icon="shuffle" iconTint="var(--teal)" title={t('Importar Treino com IA')}
+        subtitle={t('Mande uma foto do seu treino')}
         accessory="chevron" onClick={() => importRef.current.click()} />
       <Row icon="upload" iconTint="var(--blue)" title={t('Importar backup ou treino')}
         subtitle={t('PDF, foto, ficha de treino ou JSON — com OCR e IA')}

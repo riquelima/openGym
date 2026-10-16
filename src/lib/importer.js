@@ -6,7 +6,6 @@ import { useStore } from '../store/useStore.js'
 import { EXIDX, registerCustom } from './exercises.js'
 import { uid } from './format.js'
 
-export const DEFAULT_MINIMAX_KEY = 'sk-cp-meaN0PHZdGi3-5gZffia9b6PyDIh27vyk54LwG6gw965dFLWoIHowFo19rTqoHdbxhaQezJlMMBgTEYhNni51sJnMWCcPHIKtCg4GRY-pGMmrXarNIxxGQA'
 const MINIMAX_URL = 'https://api.minimaxi.chat/v1/text/chatcompletion_v2'
 const MINIMAX_MODEL = 'minimax-m3'
 
@@ -272,8 +271,8 @@ Regras:
  * input can be string or { text, imageBase64 }
  */
 export async function structurePlan(input, { onProgress } = {}) {
-  const storeKey = (useStore.getState().S.minimaxApiKey || '').trim()
-  const key = storeKey || DEFAULT_MINIMAX_KEY
+  const { getMinimaxKey } = await import('./minimax.js')
+  const key = getMinimaxKey()
 
   const text = typeof input === 'string' ? input : (input?.text || '')
   const imageBase64 = typeof input === 'object' ? input?.imageBase64 : null
