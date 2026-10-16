@@ -74,6 +74,8 @@ export const FEATURED_EXERCISEDB_EXERCISES = [
       'Segure por 1 segundo no pico de contração antes de retornar à posição inicial.'
     ],
     keywords: ['pec deck', 'peck deck', 'voador', 'lever pec deck fly', 'crucifixo maquina'],
+
+
     source: 'exercisedb'
   },
   {
@@ -84,6 +86,7 @@ export const FEATURED_EXERCISEDB_EXERCISES = [
     tg: 'peitoral inferior',
     mg: 'peito',
     sm: ['deltóide anterior', 'bíceps'],
+    video: 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/videos/0227-Pr9Rhf4.gif',
     img: 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/images/0227-Pr9Rhf4.jpg',
     gif: 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455efae41b330c265e7cd4b78dfa848e7ce5ebd/videos/0227-Pr9Rhf4.gif',
     overview: 'Exercício de pico de tensão para peitoral, excelente para enfatizar a porção inferior e esternal com contração contínua fornecida pelos cabos.',
@@ -99,6 +102,7 @@ export const FEATURED_EXERCISEDB_EXERCISES = [
       'Aperte o peitoral por 1 segundo no ponto de encontro das mãos.',
       'Retorne controlando a carga até a linha dos ombros.'
     ],
+    keywords: ['crossover', 'cross over', 'cable crossover', 'crossover no cabo', 'cross over cabo', 'polia alta peito'],
     source: 'exercisedb'
   },
   {

@@ -1,7 +1,8 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store/useStore.js'
 import { exOr } from '../lib/exercises.js'
+import { healCustomExercises } from '../lib/exercise-matcher.js'
 import { uid } from '../lib/format.js'
 import { t } from '../lib/i18n.js'
 import { supersetUnits, cleanupSg, exLine } from '../lib/history.js'
@@ -20,11 +21,27 @@ export default function RoutineEdit() {
   const S = useStore(s => s.S)
   const update = useStore(s => s.update)
   const r = S.routines.find(x => x.id === id)
-  useEffect(() => { if (!r) nav('/plan') }, [!!r])
+  useEffect(() => {
+    if (!r) {
+      nav('/plan')
+      return
+    }
+    // Auto-heal any exercises in routine that lack photo/video demonstrations
+    let needsHeal = false
+    for (const e of (r.ex || [])) {
+      const exObj = exOr(e.id)
+      if (exObj.missing || (!exObj.img && !exObj.gif && !exObj.video) || e.id.startsWith('c_')) {
+        needsHeal = true
+        break
+      }
+    }
+    if (needsHeal) {
+      update(s => { healCustomExercises(s) })
+    }
+  }, [r?.id])
   if (!r) return null
 
   const edit = fn => update(s => { fn(s.routines.find(x => x.id === id).ex) })
-  const move = (i, dir) => edit(ex => { const j = i + dir; if (j < 0 || j >= ex.length) return;[ex[i], ex[j]] = [ex[j], ex[i]]; cleanupSg(ex) })
   const toggleLink = i => edit(ex => {
     if (i < 1) return
     const cur = ex[i], prev = ex[i - 1]
@@ -56,28 +73,19 @@ export default function RoutineEdit() {
       {t('Applies to every exercise in this routine that does not set its own rule.')}
     </div>
 
-    {r.ex.length ? <div className="list">{r.ex.map((e, i) => {
-      // An unresolvable id is shown rather than skipped — hiding it left an entry you
-      // could neither see nor delete, but that still turned up in the workout.
-      const ex = exOr(e.id)
-      const linkedPrev = i > 0 && e.sg && r.ex[i - 1].sg === e.sg
-      return <div key={i}>
-        {unitFirst.has(i) && <div className="ss-label"><Icon name="link" />{t('Superset')}</div>}
-        <div className={'item' + (inSS.has(i) ? ' in-ss' : '')} onClick={() => {
-          exConfigSheet(ex, e, cfg => edit(x => { x[i] = { id: x[i].id, sg: x[i].sg, ...cfg } }), () => edit(x => { x.splice(i, 1); cleanupSg(x) }), r)
-        }}>
-          <Thumb ex={ex} />
-          <div className="grow"><div className="tt capitalize">{ex.n}</div><div className="ss">{exLine(e, S.unit)}</div></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 'none', alignItems: 'center' }}>
-            {i > 0 && <button className={'iconbtn' + (linkedPrev ? ' on-ss' : '')} title={t('Superset with exercise above')} style={{ width: 32, height: 28, borderRadius: 8, fontSize: 15 }} onClick={ev => { ev.stopPropagation(); toggleLink(i) }}><Icon name="link" /></button>}
-            <div style={{ display: 'flex', gap: 2 }}>
-              <button className="iconbtn" aria-label="Move up" style={{ width: 28, height: 24, borderRadius: 7, fontSize: 12 }} onClick={ev => { ev.stopPropagation(); move(i, -1) }}><Icon name="chevronUp" /></button>
-              <button className="iconbtn" aria-label="Move down" style={{ width: 28, height: 24, borderRadius: 7, fontSize: 12 }} onClick={ev => { ev.stopPropagation(); move(i, 1) }}><Icon name="chevronDown" /></button>
-            </div>
-          </div>
-        </div>
-      </div>
-    })}</div> : <div className="empty"><div className="ico"><Icon name="dumbbell" /></div>{t('No exercises yet — add your first one.')}</div>}
+    {r.ex.length ? <ReorderableList
+      ex={r.ex}
+      inSS={inSS}
+      unitFirst={unitFirst}
+      toggleLink={toggleLink}
+      onReorder={(from, to) => edit(list => {
+        if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return
+        const [moved] = list.splice(from, 1)
+        list.splice(to, 0, moved)
+        cleanupSg(list)
+      })}
+      onOpen={(i) => exConfigSheet(exOr(r.ex[i].id), r.ex[i], cfg => edit(x => { x[i] = { id: x[i].id, sg: x[i].sg, ...cfg } }), () => edit(x => { x.splice(i, 1); cleanupSg(x) }), r)}
+    /> : <div className="empty"><div className="ico"><Icon name="dumbbell" /></div>{t('No exercises yet — add your first one.')}</div>}
 
     {/* Coverage of the routine as planned, so a gap shows up while you're building it
         rather than after a month of training around it. */}
@@ -109,3 +117,103 @@ export default function RoutineEdit() {
     })}>{t('Delete routine')}</Button>
   </div>
 }
+
+/* Drag-to-reorder list. The whole row is a `pointer` drag handle on the left;
+   the rest of the card opens the config sheet on tap. Uses Pointer Events so
+   mouse, touch and stylus all work the same way. While dragging we show a
+   placeholder slot and a translated card; on release we commit the move. */
+function ReorderableList({ ex, inSS, unitFirst, toggleLink, onReorder, onOpen }) {
+  const [order, setOrder] = useState(ex.map((_, i) => i))
+  const [dragFrom, setDragFrom] = useState(null)
+  const [overIdx, setOverIdx] = useState(null)
+  const containerRef = useRef(null)
+  const itemRefs = useRef(new Map())
+  const lastCommit = useRef(null)
+  // Keep the local order in sync with the source list (e.g. when an item is added
+  // or removed externally). Resetting on every change is fine — the list is short
+  // and reordering commits the result back to the store, so this only fires on
+  // structural changes.
+  useEffect(() => { setOrder(ex.map((_, i) => i)) }, [ex.length, ex.map(e => e.id + ':' + (e.sg || '')).join('|')])
+
+  // Move the dragged card above/below siblings by clientY. We don't animate the
+  // reorder; we just keep the dragged card under the finger and snap the slot
+  // divider. A 2-row-threshold keeps the move from feeling jittery.
+  const onMove = ev => {
+    if (dragFrom == null) return
+    const y = ev.clientY
+    let best = null
+    for (const [i, el] of itemRefs.current.entries()) {
+      if (!el) continue
+      const r = el.getBoundingClientRect()
+      if (y >= r.top + r.height * 0.35 && y <= r.bottom - r.height * 0.35) { best = i; break }
+    }
+    if (best == null) {
+      // outside any item: clamp to first/last visible
+      const first = itemRefs.current.get(0)
+      const last = itemRefs.current.get(order.length - 1)
+      if (first && y < first.getBoundingClientRect().top) best = 0
+      else if (last && y > last.getBoundingClientRect().bottom) best = order.length - 1
+    }
+    if (best != null) setOverIdx(best)
+  }
+
+  const finish = () => {
+    if (dragFrom != null && overIdx != null && dragFrom !== overIdx) {
+      onReorder(dragFrom, overIdx)
+    }
+    setDragFrom(null); setOverIdx(null)
+  }
+
+  const start = (i, ev) => {
+    if (ev.button != null && ev.button !== 0) return
+    ev.preventDefault()
+    setDragFrom(i); setOverIdx(i)
+    try { ev.currentTarget.setPointerCapture(ev.pointerId) } catch {}
+  }
+
+  return <div className="list" ref={containerRef} onPointerMove={onMove} onPointerUp={finish} onPointerCancel={finish}>
+    {order.map((origIdx, slot) => {
+      const e = ex[origIdx]
+      const exObj = exOr(e.id)
+      const linkedPrev = slot > 0 && e.sg && ex[order[slot - 1]].sg === e.sg
+      const isDragging = dragFrom === slot
+      const isOver = overIdx === slot && dragFrom != null && dragFrom !== slot
+      return <div key={origIdx}
+        ref={el => { if (el) itemRefs.current.set(slot, el); else itemRefs.current.delete(slot) }}
+        style={{ touchAction: 'none' }}
+        onPointerMove={isDragging ? onMove : undefined}
+      >
+        {unitFirst.has(slot) && <div className="ss-label"><Icon name="link" />{t('Superset')}</div>}
+        <div className={'item' + (inSS.has(slot) ? ' in-ss' : '') + (isOver ? ' drop-target' : '')}
+          style={isDragging ? { opacity: 0.4 } : undefined}
+          onClick={isDragging ? undefined : () => onOpen(slot)}
+        >
+          {/* Drag handle — the entire left column is the grab area. The rest of the card
+              stays clickable for opening the config sheet. */}
+          <div
+            className="reorder-handle"
+            onPointerDown={ev => start(slot, ev)}
+            aria-label={t('Drag to reorder')}
+            title={t('Drag to reorder')}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '0 4px 0 2px', marginRight: 8, color: 'var(--label-3)',
+              cursor: 'grab', touchAction: 'none', flex: 'none'
+            }}
+          >
+            <Icon name="grip" style={{ fontSize: 20 }} />
+          </div>
+          <Thumb ex={exObj} />
+          <div className="grow"><div className="tt capitalize">{exObj.n}</div><div className="ss">{exLine(e, S().unit)}</div></div>
+          {slot > 0 && <button className={'iconbtn' + (linkedPrev ? ' on-ss' : '')} title={t('Superset with exercise above')}
+            style={{ width: 36, height: 36, flex: 'none' }}
+            onPointerDown={ev => ev.stopPropagation()}
+            onClick={ev => { ev.stopPropagation(); toggleLink(slot) }}><Icon name="link" /></button>}
+        </div>
+      </div>
+    })}
+  </div>
+}
+
+// Local S() so the list can read the current unit without re-rendering on every store change.
+const S = () => useStore.getState().S

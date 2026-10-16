@@ -454,98 +454,26 @@ export function pickRoutineEmoji(name, defaultEmoji) {
   return 'figureStrength'
 }
 
-export function guessBodyPart(name) {
-  const n = (name || '').toLowerCase()
-  if (n.includes('peito') || n.includes('supino') || n.includes('crucifixo') || n.includes('flexao') || n.includes('flexão')) return 'chest'
-  if (n.includes('costa') || n.includes('puxada') || n.includes('remada') || n.includes('pulldown') || n.includes('barra fixa')) return 'back'
-  if (n.includes('perna') || n.includes('agachamento') || n.includes('leg') || n.includes('extensora') || n.includes('quadriceps') || n.includes('quadríceps')) return 'upper legs'
-  if (n.includes('flexora') || n.includes('stiff') || n.includes('isquio') || n.includes('gluteo') || n.includes('glúteo')) return 'upper legs'
-  if (n.includes('panturrilha') || n.includes('gemeos') || n.includes('gêmeos')) return 'lower legs'
-  if (n.includes('ombro') || n.includes('deltoide') || n.includes('deltóide') || n.includes('desenvolvimento') || n.includes('eleva')) return 'shoulders'
-  if (n.includes('biceps') || n.includes('bíceps') || n.includes('triceps') || n.includes('tríceps') || n.includes('rosca')) return 'upper arms'
-  if (n.includes('abdomen') || n.includes('abdominal') || n.includes('prancha') || n.includes('infra')) return 'waist'
-  if (n.includes('corrida') || n.includes('esteira') || n.includes('bike') || n.includes('bicicleta')) return 'cardio'
-  return 'chest'
-}
+export {
+  guessBodyPart,
+  guessEquipment,
+  normalizeStr,
+  GYM_ALIASES,
+  matchCatalogExercise,
+  resolveOrCreateExercise,
+  resolvePlanExercisesAsync,
+  BODYPART_ARCHETYPES
+} from './exercise-matcher.js'
 
-export function guessEquipment(name) {
-  const n = (name || '').toLowerCase()
-  if (n.includes('barra') || n.includes('barbell')) return 'barbell'
-  if (n.includes('haltere') || n.includes('halter') || n.includes('dumbbell')) return 'dumbbell'
-  if (n.includes('polia') || n.includes('cabo') || n.includes('cable') || n.includes('corda')) return 'cable'
-  if (n.includes('maquina') || n.includes('máquina') || n.includes('press') || n.includes('articulad')) return 'leverage machine'
-  if (n.includes('livre') || n.includes('corpo') || n.includes('peso corporal')) return 'body weight'
-  return 'barbell'
-}
-
-// Common aliases in Brazilian gyms mapping to built-in EXDB IDs
-const GYM_ALIASES = [
-  { match: /supino\s+reto/i, id: '0025' },
-  { match: /supino\s+inclinado/i, id: '0047' },
-  { match: /supino\s+declinado/i, id: '0033' },
-  { match: /crucifixo/i, id: '0308' },
-  { match: /puxada\s+(alta|frontal|frente|aberta|pulldown)/i, id: '0007' },
-  { match: /remada\s+(curvada|baixa|cavalinho)/i, id: '0027' },
-  { match: /barra\s+fixa|pull\s*up/i, id: '2330' },
-  { match: /agachamento/i, id: '0043' },
-  { match: /leg\s*press/i, id: '2287' },
-  { match: /cadeira\s+extensora|extensora/i, id: '0585' },
-  { match: /mesa\s+flexora|cadeira\s+flexora|flexora/i, id: '0586' },
-  { match: /panturrilha|gemeos/i, id: '0605' },
-  { match: /stiff|levantamento\s+terra/i, id: '0032' },
-  { match: /desenvolvimento/i, id: '0041' },
-  { match: /eleva(cao|ção)\s+lateral/i, id: '0334' },
-  { match: /eleva(cao|ção)\s+frontal/i, id: '0978' },
-  { match: /rosca\s+(direta|biceps|bíceps)/i, id: '0031' },
-  { match: /rosca\s+alternada/i, id: '0285' },
-  { match: /rosca\s+martelo/i, id: '0313' },
-  { match: /tr(i|í)ceps\s+(corda|polia)/i, id: '0194' },
-  { match: /mergulho|paralela/i, id: '0251' },
-  { match: /abdominal|abdominais/i, id: '0001' }
-]
-
-function normalizeStr(s) {
-  return (s || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-}
-
-export function resolveOrCreateExercise(s, exName) {
-  const clean = (exName || '').trim()
-  if (!clean) return '0025'
-
-  const norm = normalizeStr(clean)
-
-  // 1. Check Brazilian gym aliases
-  for (const alias of GYM_ALIASES) {
-    if (alias.match.test(clean) || alias.match.test(norm)) {
-      if (EXIDX[alias.id]) return alias.id
-    }
-  }
-
-  // 2. Check existing custom exercises
-  const existingCustom = (s.customEx || []).find(c => normalizeStr(c.n) === norm)
-  if (existingCustom) return existingCustom.id
-
-  // 3. Create a clean custom exercise
-  const newId = 'c_' + uid()
-  const newEx = {
-    id: newId,
-    n: clean,
-    bp: guessBodyPart(clean),
-    eq: guessEquipment(clean),
-    tg: '',
-    sm: [],
-    st: [],
-    custom: true
-  }
-
-  s.customEx = s.customEx || []
-  s.customEx.push(newEx)
-  return newId
-}
+import {
+  guessBodyPart,
+  guessEquipment,
+  normalizeStr,
+  GYM_ALIASES,
+  matchCatalogExercise,
+  resolveOrCreateExercise,
+  resolvePlanExercisesAsync
+} from './exercise-matcher.js'
 
 /**
  * Automatically applies the parsed plan to the OpenGym store.
@@ -585,7 +513,10 @@ export function applyImportedPlanToStore(plan, { schedule = true, replace = fals
         const exName = (rawEx.name || rawEx.n || '').trim()
         if (!exName) continue
 
-        const resolvedId = resolveOrCreateExercise(s, exName)
+        let resolvedId = (rawEx.id && EXIDX[rawEx.id]) ? rawEx.id : null
+        if (!resolvedId) {
+          resolvedId = resolveOrCreateExercise(s, exName)
+        }
         const sets = clampInt(rawEx.sets || 3, 1, 20)
         let reps = rawEx.reps != null ? String(rawEx.reps).trim() : '8-12'
         if (!reps) reps = '10'

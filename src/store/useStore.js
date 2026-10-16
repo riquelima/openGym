@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { api } from '../lib/api.js'
 import { localTZ } from '../lib/format.js'
 import { registerCustom } from '../lib/exercises.js'
+import { healCustomExercises } from '../lib/exercise-matcher.js'
 import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
 import { MOBILE, nativeLoad, nativeSave, syncReminder } from '../lib/mobile.js'
 
@@ -37,6 +38,12 @@ function loadState() {
       if (!merged.minimaxApiKey || !merged.minimaxApiKey.trim()) {
         merged.minimaxApiKey = DEFAULT_MINIMAX_KEY
       }
+      try {
+        const healed = healCustomExercises(merged)
+        if (healed) {
+          localStorage.setItem(KEY, JSON.stringify(merged))
+        }
+      } catch {}
       return merged
     }
   } catch (e) { /* ignore */ }
@@ -114,7 +121,11 @@ export const useStore = create((set, get) => {
       mut(S)
       persist(S, push)
     },
-    replaceState(S, push = false) { persist(clone(S), push) },
+    replaceState(S, push = false) {
+      const c = clone(S)
+      try { healCustomExercises(c) } catch {}
+      persist(c, push)
+    },
 
     isGuest: () => localStorage.getItem('gym_guest') === '1',
     setGuest(v) { if (v) localStorage.setItem('gym_guest', '1'); else localStorage.removeItem('gym_guest'); set({}) },

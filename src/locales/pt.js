@@ -871,6 +871,7 @@ export default {
   "Coming back after a break": "Voltando após uma pausa",
   "Training regularly": "Treinando com regularidade",
   "Selects every piece of equipment a commercial gym typically has": "Seleciona todos os equipamentos que uma academia normalmente tem",
+  "Drag to reorder": "Arraste para reordenar",
   "Weekly Challenge": "Desafio da Semana",
   "Recommendations": "Recomendações",
   "See all": "Ver todos",

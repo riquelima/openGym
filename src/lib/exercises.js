@@ -111,7 +111,7 @@ const GIF_BASE = import.meta.env.VITE_GIF_BASE || DEFAULT_GIF_BASE
 
 export const imgSrc = ex => {
   if (!ex) return ''
-  const src = ex.img || ex.imageUrl || ex.imageUrls?.['720p'] || ex.imageUrls?.['480p'] || ex.imageUrls?.['360p']
+  const src = ex.img || ex.imageUrl || ex.imageUrls?.['720p'] || ex.imageUrls?.['480p'] || ex.imageUrls?.['360p'] || ex.gif || ex.gifUrl
   if (!src) return ''
   if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('blob:') || src.startsWith('data:')) return src
   return IMG_BASE + src
@@ -119,7 +119,7 @@ export const imgSrc = ex => {
 
 export const gifSrc = ex => {
   if (!ex) return ''
-  const src = ex.gif || ex.gifUrl
+  const src = ex.gif || ex.gifUrl || ex.video || ex.videoUrl
   if (!src) return ''
   if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('blob:')) return src
   return GIF_BASE + src

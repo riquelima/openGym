@@ -106,10 +106,10 @@ export default function Media({ ex, id, compact, minimizable }) {
 
 export function Thumb({ ex }) {
   const [err, setErr] = useState(false)
-  const src = imgSrc(ex)
-  const hasVid = !!ex?.video || !!ex?.videoUrl
+  const src = imgSrc(ex) || gifSrc(ex)
+  const hasVid = !!ex?.video || !!ex?.videoUrl || !!ex?.gif || !!ex?.gifUrl
 
-  if (err || (!src && !ex?.img && !ex?.imageUrl)) {
+  if (err || (!src && !ex?.img && !ex?.imageUrl && !ex?.gif && !ex?.gifUrl)) {
     return (
       <div className="thumb thumb-x">
         <Icon name={hasVid ? 'video' : 'dumbbell'} />

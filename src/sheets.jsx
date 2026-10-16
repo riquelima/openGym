@@ -17,7 +17,7 @@ import { glyphOf, GLYPH_GROUPS, DEFAULT_GLYPH } from './lib/glyphs.js'
 import BodyMap from './components/BodyMap.jsx'
 import { loadOfWorkouts } from './lib/muscles.js'
 import { parseImport, mergeImport } from './lib/import-csv.js'
-import { extractText, structurePlan, applyImportedPlanToStore } from './lib/importer.js'
+import { extractText, structurePlan, applyImportedPlanToStore, resolvePlanExercisesAsync } from './lib/importer.js'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share.js'
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC } from './lib/progression.js'
@@ -239,14 +239,19 @@ function SmartImportSheet({ file, close }) {
         setStatusText(t('Estruturando plano de treino com IA Minimax…'))
 
         const structured = await structurePlan(extracted, {
-          onProgress: p => setProgress(Math.min(0.9, 0.6 + (p || 0) * 0.3))
+          onProgress: p => setProgress(Math.min(0.85, 0.6 + (p || 0) * 0.25))
         })
 
         const normalized = structured.plan
         setPlan(normalized)
         setSource(structured.source)
 
-        setProgress(0.95)
+        setProgress(0.88)
+        setStatusText(t('Buscando vídeos e fotos na base de dados das APIs…'))
+
+        await resolvePlanExercisesAsync(normalized, useStore.getState().S)
+
+        setProgress(0.96)
         setStatusText(t('Criando rotinas e cadastrando exercícios…'))
 
         // Automatically create and schedule routines in the store!
@@ -255,7 +260,7 @@ function SmartImportSheet({ file, close }) {
 
         setProgress(1)
         setPhase('success')
-        toast(t('Plano importado e criado com sucesso!'))
+        toast(t('Plano importado com sucesso! Todos os treinos vinculados com vídeo e foto.'))
       } catch (e) {
         // Safe fallback - never throw
         try {
@@ -316,7 +321,8 @@ function SmartImportSheet({ file, close }) {
     } : r)
   }))
 
-  const saveEdits = () => {
+  const saveEdits = async () => {
+    await resolvePlanExercisesAsync(plan, S())
     const res = applyImportedPlanToStore(plan, { schedule: true, replace: false })
     setCreatedRoutines(res.routines)
     setPhase('success')
