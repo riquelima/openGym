@@ -8,6 +8,7 @@ import { t } from '../lib/i18n.js'
 import { Thumb } from '../components/Media.jsx'
 import { exerciseDetailSheet, addToRoutineSheet, customExSheet } from '../sheets.jsx'
 import Icon from '../components/Icon.jsx'
+import FitnessIcon, { bodyPartIconSlug, equipmentIconSlug } from '../components/fitness-icons/index.jsx'
 import { Button } from '../components/ui.jsx'
 
 export default function Library() {
@@ -83,11 +84,15 @@ export default function Library() {
       <button className={'chip nocap' + (!bp ? ' on' : '')} onClick={() => { setBp(''); setEq(''); setShown(40) }}>
         {t('All')}
       </button>
-      {BODYPARTS.map(b => (
-        <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setEq(''); setShown(40) }}>
-          {t(b)}
-        </button>
-      ))}
+      {BODYPARTS.map(b => {
+        const slug = bodyPartIconSlug(b)
+        return (
+          <button key={b} className={'chip' + (bp === b ? ' on' : '')} onClick={() => { setBp(b); setEq(''); setShown(40) }}>
+            {slug && <FitnessIcon slug={slug} size={18} className="chip-icn" />}
+            {t(b)}
+          </button>
+        )
+      })}
     </div>
 
     {/* Equipment chips */}
@@ -97,13 +102,18 @@ export default function Library() {
           {t('Any equipment')}
         </button>
         <button className={'chip' + (eqOn === 'gym' ? ' on' : '')} onClick={() => { setEq(eqOn === 'gym' ? '' : 'gym'); setShown(40) }}>
-          🏋️ {t('Academia')}
+          <FitnessIcon slug="deadlift" size={18} className="chip-icn" />
+          {t('Academia')}
         </button>
-        {eqOpts.map(x => (
-          <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(40) }}>
-            {t(x)}
-          </button>
-        ))}
+        {eqOpts.map(x => {
+          const slug = equipmentIconSlug(x)
+          return (
+            <button key={x} className={'chip' + (eqOn === x ? ' on' : '')} onClick={() => { setEq(x); setShown(40) }}>
+              {slug && <FitnessIcon slug={slug} size={18} className="chip-icn" />}
+              {t(x)}
+            </button>
+          )
+        })}
       </div>
     )}
 

@@ -3,6 +3,7 @@ import { imgSrc, gifSrc, videoSrc } from '../lib/exercises.js'
 import { useStore } from '../store/useStore.js'
 import { t } from '../lib/i18n.js'
 import Icon from './Icon.jsx'
+import FitnessIcon, { equipmentIconSlug, bodyPartIconSlug } from './fitness-icons/index.jsx'
 import { haptic } from '../lib/haptics.js'
 
 // Displays exercise demonstration media:
@@ -80,7 +81,11 @@ export default function Media({ ex, id, compact, minimizable }) {
       ) : (
         <div className="media-placeholder">
           <div className="media-placeholder-icon">
-            <Icon name="dumbbell" />
+            <FitnessIcon
+              slug={equipmentIconSlug(ex.eq) || bodyPartIconSlug(ex.bp) || 'bench-press'}
+              size={72}
+              fallback={<Icon name="dumbbell" />}
+            />
           </div>
           <div className="media-placeholder-title capitalize">{ex.n}</div>
           <div className="media-placeholder-sub capitalize">{t(ex.tg || ex.bp)} · {t(ex.eq)}</div>
@@ -112,7 +117,10 @@ export function Thumb({ ex }) {
   if (err || (!src && !ex?.img && !ex?.imageUrl && !ex?.gif && !ex?.gifUrl)) {
     return (
       <div className="thumb thumb-x">
-        <Icon name={hasVid ? 'video' : 'dumbbell'} />
+        <FitnessIcon
+          slug={equipmentIconSlug(ex?.eq) || bodyPartIconSlug(ex?.bp) || 'bench-press'}
+          fallback={<Icon name={hasVid ? 'video' : 'dumbbell'} />}
+        />
       </div>
     )
   }

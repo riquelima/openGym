@@ -10,6 +10,7 @@ import LineChart from '../components/LineChart.jsx'
 import Heatmap from '../components/Heatmap.jsx'
 import Icon from '../components/Icon.jsx'
 import BodyMap, { BodyMapLegend } from '../components/BodyMap.jsx'
+import BodyExplorer from '../components/BodyExplorer.jsx'
 import { loadOfWorkouts, rankOf, MUSCLE_NAME } from '../lib/muscles.js'
 import { e1rmSeries, best1RM } from '../lib/onerm.js'
 import {
@@ -211,6 +212,7 @@ export default function Stats() {
     </div>
 
     {S.workouts.length > 0 && <MuscleBalance S={S} />}
+    <BodyExplorer S={S} />
     {anyEffort && <EffortCard S={S} />}
 
     <div className="cols">

@@ -15,6 +15,10 @@ node_modules/
 *.log
 .DS_Store
 
+# Raw workout-guide SVGs (re-fetched on first build by scripts/build-fitness-icons.mjs)
+src/components/fitness-icons/src-assets/
+src/components/fitness-icons/manifest.json
+
 # Local AI-assistant tooling — contributor's own setup, not part of the app
 .claude/
 .codex/
