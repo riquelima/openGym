@@ -489,6 +489,143 @@ h4.sec{
   font-size:16px;z-index:2;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25));
 }
 
+/* ------------------------------------------------ AI Coach Recommendations Carousel -- */
+.ai-coach-carousel {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 4px 4px 16px 4px;
+  margin: 0 -4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.ai-coach-carousel::-webkit-scrollbar {
+  display: none;
+}
+.ai-coach-card {
+  flex: 0 0 min(290px, 82vw);
+  min-height: 220px;
+  scroll-snap-align: start;
+  background: rgba(30, 30, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: transform var(--fast) ease, box-shadow var(--fast) ease, border-color var(--fast) ease;
+  position: relative;
+  user-select: none;
+}
+:root[data-theme="light"] .ai-coach-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.ai-coach-card:active {
+  transform: scale(0.985);
+}
+.ai-coach-pill {
+  font-family: var(--font-athletic);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(var(--acc-rgb, 198, 241, 53), 0.14);
+  color: var(--acc);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ai-coach-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.ai-coach-badge {
+  font-family: var(--font-athletic);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.ai-coach-icon-bubble {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.ai-coach-card-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--label);
+  margin-bottom: 6px;
+}
+.ai-coach-metric-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--sep);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: var(--font-athletic);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--label);
+  margin-bottom: 8px;
+  align-self: flex-start;
+}
+.ai-coach-card-summary {
+  font-family: var(--font-athletic);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+  line-height: 1.35;
+  margin-bottom: 6px;
+}
+.ai-coach-card-detail {
+  font-family: var(--font-athletic);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--label-2);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.ai-coach-card-footer {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--sep);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.ai-coach-action-link {
+  font-family: var(--font-athletic);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--acc);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* ------------------------------------------------ Figma Round Badge (11.2 - B) -- */
 .round-title{
   font-family:var(--font-display);font-size:18px;font-weight:600;

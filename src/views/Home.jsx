@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { effectiveRoutine, effectiveRoutineId, streakWeeks, lastBW, setsDoneActive } from '../lib/history.js'
@@ -13,8 +13,7 @@ import { coachAvailable, hasConsent } from '../lib/coach.js'
 import { useCoachStatus } from '../lib/coach-api.js'
 import { DEMO } from '../lib/demo.js'
 import { MOBILE } from '../lib/mobile.js'
-import { EXIDX, EXDB } from '../lib/exercises.js'
-import { Thumb } from '../components/Media.jsx'
+import { generateAICoachCards } from '../lib/recommendations.js'
 
 // A job in flight or a proposal waiting is the only reason the Coach interrupts Home. When it
 // has nothing to say it renders nothing at all — and it only polls while Home is on screen.
@@ -78,53 +77,14 @@ export default function Home() {
   // today's session shown right under the week strip
   const onToday = () => { if (S.active) nav('/workout'); else if (routine) startFlow(routine.id); else dayOverrideSheet(todayISO()) }
 
-  // Recommendations derived from user routines or starter gym workouts (Figma 11.1 & 11.3)
-  const recommendations = S.routines.length > 0 ? S.routines.map(r => {
-    const firstExId = r.ex?.[0]
-    const exObj = firstExId ? (EXIDX[firstExId] || (typeof firstExId === 'object' ? firstExId : null)) : null
-    const count = r.ex?.length || 0
-    return {
-      id: r.id,
-      title: r.name,
-      desc: t('Rotina com foco em hipertrofia e desenvolvimento muscular.'),
-      time: `${count * 8 || 35} Min`,
-      exercises: `${count} ${t('exercises')}`,
-      cal: `${count * 60 || 240} Kcal`,
-      ex: exObj,
-      onClick: () => startFlow(r.id)
+  // AI Coach Dynamic Recommendation Engine
+  const coachCards = useMemo(() => generateAICoachCards(S), [S])
+  const carouselRef = useRef(null)
+  const scrollCarousel = (dir) => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollBy({ left: dir * 300, behavior: 'smooth' })
     }
-  }) : [
-    {
-      id: 'rec-upper',
-      title: t('Upper Body'),
-      desc: t('Foco intenso em peitoral, deltoides, dorsais e braços com sobrecarga.'),
-      time: `45 Min`,
-      exercises: `6 ${t('exercises')}`,
-      cal: `340 Kcal`,
-      ex: EXDB[0] || null,
-      onClick: () => loadStarterPlan()
-    },
-    {
-      id: 'rec-lower',
-      title: t('Lower Body'),
-      desc: t('Construção de força para quadríceps, posteriores, glúteos e panturrilhas.'),
-      time: `50 Min`,
-      exercises: `5 ${t('exercises')}`,
-      cal: `420 Kcal`,
-      ex: EXDB[1] || null,
-      onClick: () => loadStarterPlan()
-    },
-    {
-      id: 'rec-core',
-      title: t('Functional & Core'),
-      desc: t('Estabilidade corporal, abdômen definido e mobilidade dinâmica.'),
-      time: `30 Min`,
-      exercises: `4 ${t('exercises')}`,
-      cal: `210 Kcal`,
-      ex: EXDB[2] || null,
-      onClick: () => loadStarterPlan()
-    }
-  ]
+  }
 
   return <div className="narrow">
     {/* Figma Header Greeting */}
@@ -218,50 +178,95 @@ export default function Home() {
       </div>
     )}
 
-    {/* Recommendations & Favorites Section */}
+    {/* AI Coach Dynamic Recommendations Carousel */}
     <div style={{ marginTop: 22, marginBottom: 14 }}>
-      <div className="row between" style={{ marginBottom: 12, padding: '0 4px' }}>
-        <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--acc)', fontWeight: 600 }}>
-          {t('Recommendations')}
-        </h3>
-        <button
-          style={{ color: 'var(--label-2)', fontSize: 13, fontFamily: 'var(--font-athletic)', cursor: 'pointer', background: 'none', border: 'none' }}
-          onClick={() => nav('/plan')}
-        >
-          {t('See all')} →
-        </button>
+      <div className="row between" style={{ marginBottom: 10, padding: '0 4px', alignItems: 'flex-end' }}>
+        <div>
+          <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+            <span style={{ color: 'var(--acc)', display: 'inline-flex', fontSize: 16 }}>
+              <Icon name="sparkles" />
+            </span>
+            <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18, color: 'var(--acc)', fontWeight: 600 }}>
+              {t('Recommendations')}
+            </h3>
+            <span className="ai-coach-pill">{coachCards.length} {t('dicas')}</span>
+          </div>
+          <div className="small muted" style={{ marginTop: 2, fontFamily: 'var(--font-athletic)' }}>
+            {t('Dicas do AI Coach personalizadas para seu treino e peso')}
+          </div>
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <button
+            className="iconbtn"
+            style={{ width: 28, height: 28, fontSize: 13 }}
+            onClick={() => scrollCarousel(-1)}
+            aria-label="Anterior"
+          >
+            <Icon name="chevronLeft" />
+          </button>
+          <button
+            className="iconbtn"
+            style={{ width: 28, height: 28, fontSize: 13 }}
+            onClick={() => scrollCarousel(1)}
+            aria-label="Próximo"
+          >
+            <Icon name="chevronRight" />
+          </button>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {recommendations.slice(0, 3).map(item => (
-          <div key={item.id} className="figma-card" onClick={item.onClick}>
-            <div className="figma-card-info">
-              <div>
-                <div className="figma-card-title">{item.title}</div>
-                <div className="figma-card-desc">{item.desc}</div>
+      <div ref={carouselRef} className="ai-coach-carousel">
+        {coachCards.map((card, idx) => (
+          <div
+            key={card.id || idx}
+            className="ai-coach-card"
+            onClick={() => {
+              if (card.action?.type === 'nav') nav(card.action.path)
+              else if (card.action?.type === 'bwSheet') bwSheet()
+              else if (card.action?.type === 'startFlow') startFlow(card.action.routineId)
+            }}
+          >
+            <div>
+              <div className="ai-coach-card-header">
+                <span
+                  className="ai-coach-badge"
+                  style={{
+                    color: card.badgeColor || 'var(--acc)',
+                    background: card.badgeColor ? `${card.badgeColor}18` : 'rgba(var(--acc-rgb), 0.12)',
+                    borderColor: card.badgeColor ? `${card.badgeColor}33` : 'rgba(var(--acc-rgb), 0.25)'
+                  }}
+                >
+                  {card.badge}
+                </span>
+                <span
+                  className="ai-coach-icon-bubble"
+                  style={{
+                    color: card.badgeColor || 'var(--acc)',
+                    background: card.badgeColor ? `${card.badgeColor}14` : 'var(--surface-2)'
+                  }}
+                >
+                  <Icon name={card.icon || 'sparkles'} />
+                </span>
               </div>
-              <div className="figma-card-stats">
-                <span className="figma-stat-item">
-                  <Icon name="timer" className="figma-stat-icon" />
-                  <span>{item.time}</span>
-                </span>
-                <span className="figma-stat-item">
-                  <Icon name="dumbbell" className="figma-stat-icon" />
-                  <span>{item.exercises}</span>
-                </span>
-                <span className="figma-stat-item">
-                  <Icon name="flame" className="figma-stat-icon" />
-                  <span>{item.cal}</span>
-                </span>
-              </div>
+
+              <div className="ai-coach-card-title">{card.title}</div>
+
+              {card.metric && (
+                <div className="ai-coach-metric-pill">
+                  <Icon name="flame" style={{ fontSize: 11, color: card.badgeColor || 'var(--acc)' }} />
+                  <span>{card.metric}</span>
+                </div>
+              )}
+
+              <div className="ai-coach-card-summary">{card.summary}</div>
+              <div className="ai-coach-card-detail">{card.detail}</div>
             </div>
-            {item.ex ? (
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <Thumb ex={item.ex} />
-              </div>
-            ) : (
-              <div className="thumb thumb-x" style={{ width: 64, height: 64, borderRadius: 16 }}>
-                <Icon name="dumbbell" style={{ color: 'var(--acc)' }} />
+
+            {card.action && (
+              <div className="ai-coach-card-footer">
+                <span className="ai-coach-action-link">
+                  {card.action.label} →
+                </span>
               </div>
             )}
           </div>
