@@ -1286,6 +1286,13 @@ h4.sec{
   position:relative;
   overflow:hidden;
 }
+.bex-active-filter-bar{
+  padding:8px 12px;
+  border-radius:var(--r, 12px);
+  background:var(--surface-2);
+  border:var(--hair) solid var(--sep);
+  backdrop-filter:blur(8px);
+}
 .bex-title-badge{
   width:32px;height:32px;border-radius:50%;display:grid;place-items:center;
   background:var(--acc-soft);color:var(--acc);flex:none;
