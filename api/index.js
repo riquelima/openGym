@@ -72,10 +72,37 @@ async function writeState(uid, state) {
 }
 
 /* ---------- push notifications (Web Push / VAPID) ---------- */
-let vapid = { publicKey: process.env.VAPID_PUBLIC_KEY || '', privateKey: process.env.VAPID_PRIVATE_KEY || '' };
-if (vapid.publicKey && vapid.privateKey) {
-  const VAPID_SUBJECT = process.env.VAPID_SUBJECT || (SECURE ? ORIGIN : 'mailto:admin@localhost');
+const DEFAULT_VAPID = {
+  publicKey: 'BHoKqGMxbAV4xZ5X0iaRD0HbRyU3NR01fnZE_we8-89H_vlZ9ZVbFGrSOMOx-bMa0BZmi3h8Mp3Li_-f2GMNEvs',
+  privateKey: 'tYX3Nm4NeqtcUt9B3Etkj2PrtoVQaNmSYYnioiDpp74'
+};
+
+async function getVapid() {
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    return { publicKey: process.env.VAPID_PUBLIC_KEY.trim(), privateKey: process.env.VAPID_PRIVATE_KEY.trim() };
+  }
+  try {
+    let stored = await kvGet('vapid.json', null);
+    if (stored?.publicKey && stored?.privateKey) {
+      return { publicKey: stored.publicKey.trim(), privateKey: stored.privateKey.trim() };
+    }
+    const generated = webpush.generateVAPIDKeys();
+    await kvSet('vapid.json', generated);
+    return generated;
+  } catch {
+    return DEFAULT_VAPID;
+  }
+}
+
+let vapid = DEFAULT_VAPID;
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  vapid = { publicKey: process.env.VAPID_PUBLIC_KEY.trim(), privateKey: process.env.VAPID_PRIVATE_KEY.trim() };
+}
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || (SECURE ? ORIGIN : 'mailto:admin@localhost');
+try {
   webpush.setVapidDetails(VAPID_SUBJECT, vapid.publicKey, vapid.privateKey);
+} catch (e) {
+  console.error('setVapidDetails error', e);
 }
 
 async function sendPush(userId, payload) {
@@ -396,7 +423,10 @@ const routes = {
     json(res, 200, { ok: true, ts: body.state._ts || null });
   },
 
-  'GET /api/push/public-key': async (req, res) => json(res, 200, { key: vapid.publicKey }),
+  'GET /api/push/public-key': async (req, res) => {
+    const v = await getVapid();
+    json(res, 200, { key: v.publicKey });
+  },
 
   'POST /api/push/subscribe': async (req, res) => {
     const user = readSession(req, req.db);
