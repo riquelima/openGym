@@ -124,10 +124,16 @@ export default function Home() {
     {/* Figma Group 14: Weekly Challenge Banner */}
     <div className="challenge-banner" onClick={() => calendarSheet()}>
       <div className="row between" style={{ alignItems: 'flex-start' }}>
-        <div>
+        <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
           <div className="challenge-title">{t('Weekly Challenge')}</div>
           <div className="challenge-sub">
             {wThisWeek} de {plannedPerWeek || 4} treinos na semana · {t('{0} week streak', streakWeeks(S))}
+          </div>
+          <div className="dash-bullet-wrap" style={{ marginTop: 8, height: 5, background: 'rgba(255,255,255,0.12)' }}>
+            <div
+              className="dash-bullet-fill"
+              style={{ width: `${Math.min(100, Math.round((wThisWeek / (plannedPerWeek || 4)) * 100))}%` }}
+            />
           </div>
         </div>
         <span className="play-btn-circle lime" style={{ width: 38, height: 38, fontSize: 16 }}>
