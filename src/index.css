@@ -1474,6 +1474,147 @@ h4.sec{
 /* ------------------------------------------------------------- workout --- */
 .wprog{height:4px;background:var(--surface-2);border-radius:99px;overflow:hidden;margin-bottom:16px}
 .wprog i{display:block;height:100%;background:var(--acc);border-radius:99px;transition:width var(--med) var(--ease)}
+
+/* ----------------------------- Workout Exercise Swipe & Intuitive Nav Dock -- */
+.workout-swipe-container {
+  touch-action: pan-y;
+  position: relative;
+  width: 100%;
+}
+.anim-slide-left {
+  animation: slideInFromRight 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.anim-slide-right {
+  animation: slideInFromLeft 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes slideInFromRight {
+  0% { opacity: 0.6; transform: translateX(24px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideInFromLeft {
+  0% { opacity: 0.6; transform: translateX(-24px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* Pagination Stepper & Interactive Dots */
+.workout-stepper-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 4px 2px;
+}
+.workout-stepper-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.workout-step-dot {
+  height: 7px;
+  width: 22px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all var(--fast) ease;
+}
+.workout-step-dot.active {
+  width: 38px;
+  background: var(--acc);
+  box-shadow: 0 0 10px var(--acc-soft);
+}
+.workout-step-dot.done {
+  background: #34c48b;
+}
+.workout-stepper-label {
+  font-family: var(--font-athletic);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+.workout-swipe-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--label-3);
+  font-family: var(--font-athletic);
+}
+
+/* Intuitive Previous & Next Navigation Dock */
+.workout-nav-dock {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 10px;
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+.workout-nav-btn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 58px;
+  padding: 10px 14px;
+  border-radius: var(--r-card, 18px);
+  border: 1px solid var(--sep);
+  background: var(--surface-2);
+  color: var(--label);
+  cursor: pointer;
+  transition: transform var(--fast) ease, background var(--fast) ease, border-color var(--fast) ease, box-shadow var(--fast) ease;
+  user-select: none;
+  text-align: left;
+}
+.workout-nav-btn:active {
+  transform: scale(0.975);
+}
+.workout-nav-btn:disabled {
+  opacity: 0.32;
+  cursor: default;
+  pointer-events: none;
+}
+.workout-nav-btn.next {
+  background: var(--acc);
+  color: var(--on-acc);
+  border-color: transparent;
+  box-shadow: 0 6px 20px -2px var(--acc-soft);
+  text-align: right;
+  align-items: flex-end;
+}
+.workout-nav-btn.next:active {
+  background: var(--acc-2);
+}
+.workout-nav-btn.finish {
+  background: #34c48b;
+  color: #06311e;
+  border-color: transparent;
+  box-shadow: 0 6px 20px -2px rgba(52, 196, 139, 0.4);
+  text-align: right;
+  align-items: flex-end;
+}
+.workout-nav-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.workout-nav-sub {
+  font-family: var(--font-athletic);
+  font-size: 11.5px;
+  font-weight: 500;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  margin-top: 2px;
+}
+
 .exmedia{position:relative;border-radius:var(--r-lg);overflow:hidden;background:#000;border:1px solid var(--border);margin-bottom:12px;transition:background .2s ease}
 .exmedia.has-video{background:#000}
 .exmedia img, .exmedia video, .exmedia .explayer{width:100%;height:320px;object-fit:contain;display:block;background:#000}

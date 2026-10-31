@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
@@ -14,6 +14,7 @@ import Icon from '../components/Icon.jsx'
 import { Button, Check, NumberField } from '../components/ui.jsx'
 import { nextPrescription, applyPrescription } from '../lib/progression.js'
 import { glyphOf } from '../lib/glyphs.js'
+import { hapticSelection } from '../lib/haptics.js'
 
 /* ---------- start chooser (no active workout) ---------- */
 function StartChooser() {
@@ -154,6 +155,73 @@ function ActiveWorkout() {
   const total = A.entries.reduce((n, e) => n + e.sets.length, 0)
   const done = setsDoneActive(A)
 
+  const [slideAnim, setSlideAnim] = useState('')
+  const touchStartRef = useRef(null)
+
+  const isUnitDone = (u) => u.every(idx => {
+    const e = A.entries[idx]
+    return e && e.sets.length > 0 && e.sets.every(s => s.done)
+  })
+
+  const goToUnit = (targetUnitIdx, direction = null) => {
+    if (targetUnitIdx < 0 || targetUnitIdx >= units.length || targetUnitIdx === unitIdx) return
+    hapticSelection()
+    const dir = direction || (targetUnitIdx > unitIdx ? 'anim-slide-left' : 'anim-slide-right')
+    setSlideAnim(dir)
+    update(s => { s.active.cur = units[targetUnitIdx][0] })
+  }
+
+  const goToPrev = () => {
+    if (unitIdx > 0) goToUnit(unitIdx - 1, 'anim-slide-right')
+  }
+
+  const goToNext = () => {
+    if (unitIdx < units.length - 1) goToUnit(unitIdx + 1, 'anim-slide-left')
+  }
+
+  const onTouchStart = (e) => {
+    if (e.target.closest('button, input, select, textarea, .stp, .ck, .sheet, a')) {
+      touchStartRef.current = null
+      return
+    }
+    const touch = e.touches[0]
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    }
+  }
+
+  const onTouchEnd = (e) => {
+    if (!touchStartRef.current) return
+    const touch = e.changedTouches[0]
+    const dx = touch.clientX - touchStartRef.current.x
+    const dy = touch.clientY - touchStartRef.current.y
+    const dt = Date.now() - touchStartRef.current.time
+    touchStartRef.current = null
+
+    // Swipe horizontally: minimum 40px and dominant horizontal component within 650ms
+    if (dt < 650 && Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.35) {
+      if (dx < 0) {
+        goToNext()
+      } else {
+        goToPrev()
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!slideAnim) return
+    const tm = setTimeout(() => setSlideAnim(''), 240)
+    return () => clearTimeout(tm)
+  }, [slideAnim, unitIdx])
+
+  const prevUnit = unitIdx > 0 ? units[unitIdx - 1] : null
+  const nextUnit = unitIdx >= 0 && unitIdx < units.length - 1 ? units[unitIdx + 1] : null
+  const prevEx = prevUnit ? exOr(A.entries[prevUnit[0]].id) : null
+  const nextEx = nextUnit ? exOr(A.entries[nextUnit[0]].id) : null
+  const isLastUnit = unitIdx >= units.length - 1
+
   const mutEntry = (idx, fn) => update(s => { fn(s.active.entries[idx]) }, true)
   // Clearing an optional field drops the key rather than storing null, so a set only carries
   // what was actually logged — in the session, in history and in a backup.
@@ -245,26 +313,100 @@ function ActiveWorkout() {
     <div className="wprog"><i style={{ width: (total ? done / total * 100 : 0) + '%' }} /></div>
 
     {A.entries.length ? <>
-      <div className="muted small" style={{ marginBottom: 6 }}>{isSuperset ? t('Superset {0} / {1}', unitIdx + 1, units.length) : t('Exercise {0} / {1}', unitIdx + 1, units.length)}</div>
-      {isSuperset ? (
-        <div className="ss-card">
-          <div className="ss-hd"><Icon name="link" />{t('Superset · do these back-to-back, rest after both')}</div>
-          {unit.map((idx, k) => <div key={idx} className="ss-ex">
-            {k > 0 && <div className="ss-amp">+</div>}
-            <ExerciseBlock entryIdx={idx} compact
-              onToggle={i => toggle(idx, i)} onField={(i, f, v) => setField(idx, i, f, v)} onAddSet={() => addSet(idx)} onRemoveSet={() => removeSet(idx)} onStartTimed={i => startTimed(idx, i)} />
-          </div>)}
+      {units.length > 1 ? (
+        <div className="workout-stepper-strip">
+          <div className="workout-stepper-dots">
+            {units.map((u, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`workout-step-dot ${i === unitIdx ? 'active' : ''} ${isUnitDone(u) ? 'done' : ''}`}
+                onClick={() => goToUnit(i)}
+                aria-label={t('Exercise {0} / {1}', i + 1, units.length)}
+              />
+            ))}
+          </div>
+          <div className="workout-swipe-hint">
+            <span>{isSuperset ? t('Superset {0} / {1}', unitIdx + 1, units.length) : t('Exercise {0} / {1}', unitIdx + 1, units.length)}</span>
+            <span style={{ opacity: 0.65 }}>· ↔ {t('Deslize')}</span>
+          </div>
         </div>
       ) : (
-        <ExerciseBlock entryIdx={cur} onToggle={i => toggle(cur, i)} onField={(i, f, v) => setField(cur, i, f, v)} onAddSet={() => addSet(cur)} onRemoveSet={() => removeSet(cur)} onStartTimed={i => startTimed(cur, i)} />
+        <div className="muted small" style={{ marginBottom: 6 }}>{t('Exercise {0} / {1}', 1, 1)}</div>
       )}
+
+      <div
+        className={`workout-swipe-area ${slideAnim}`}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onAnimationEnd={() => setSlideAnim('')}
+      >
+        {isSuperset ? (
+          <div className="ss-card">
+            <div className="ss-hd"><Icon name="link" />{t('Superset · do these back-to-back, rest after both')}</div>
+            {unit.map((idx, k) => <div key={idx} className="ss-ex">
+              {k > 0 && <div className="ss-amp">+</div>}
+              <ExerciseBlock entryIdx={idx} compact
+                onToggle={i => toggle(idx, i)} onField={(i, f, v) => setField(idx, i, f, v)} onAddSet={() => addSet(idx)} onRemoveSet={() => removeSet(idx)} onStartTimed={i => startTimed(idx, i)} />
+            </div>)}
+          </div>
+        ) : (
+          <ExerciseBlock entryIdx={cur} onToggle={i => toggle(cur, i)} onField={(i, f, v) => setField(cur, i, f, v)} onAddSet={() => addSet(cur)} onRemoveSet={() => removeSet(cur)} onStartTimed={i => startTimed(cur, i)} />
+        )}
+      </div>
     </> : <div className="empty"><div className="ico"><Icon name="shuffle" /></div>{t('Freestyle workout — add your first exercise.')}</div>}
 
-    <div style={{ height: 12 }} />
-    <div className="row">
-      <Button icon="chevronLeft" disabled={unitIdx <= 0} onClick={() => update(s => { s.active.cur = units[unitIdx - 1][0] })}>{t('Prev')}</Button>
-      <Button trailingIcon="chevronRight" disabled={unitIdx < 0 || unitIdx >= units.length - 1} onClick={() => update(s => { s.active.cur = units[unitIdx + 1][0] })}>{t('Next')}</Button>
-    </div>
+    {A.entries.length > 0 && (
+      <div className="workout-nav-dock">
+        <button
+          type="button"
+          className="workout-nav-btn prev"
+          disabled={unitIdx <= 0}
+          onClick={goToPrev}
+          aria-label={t('Prev')}
+        >
+          <div className="workout-nav-main">
+            <Icon name="chevronLeft" />
+            <span>{t('Prev')}</span>
+          </div>
+          <div className="workout-nav-sub">
+            {prevEx ? (prevUnit?.length > 1 ? '🔗 ' + prevEx.n : prevEx.n) : t('Início')}
+          </div>
+        </button>
+
+        {isLastUnit ? (
+          <button
+            type="button"
+            className="workout-nav-btn finish"
+            onClick={finishWorkout}
+            aria-label={t('Finish workout')}
+          >
+            <div className="workout-nav-main">
+              <span>{t('Finish workout')}</span>
+              <Icon name="check" />
+            </div>
+            <div className="workout-nav-sub">
+              {done === total ? t('Todas as séries feitas!') : t('{0} sets', done + '/' + total)}
+            </div>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="workout-nav-btn next"
+            onClick={goToNext}
+            aria-label={t('Next')}
+          >
+            <div className="workout-nav-main">
+              <span>{t('Next')}</span>
+              <Icon name="chevronRight" />
+            </div>
+            <div className="workout-nav-sub">
+              {nextEx ? (nextUnit?.length > 1 ? '🔗 ' + nextEx.n : nextEx.n) : ''}
+            </div>
+          </button>
+        )}
+      </div>
+    )}
     <div style={{ height: 10 }} />
     <Button onClick={() => exercisePicker(ex => exConfigSheet(ex, null, cfg => update(s => {
       const full = { ...cfg, id: ex.id }
