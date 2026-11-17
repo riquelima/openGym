@@ -121,7 +121,7 @@ export default function Settings() {
   return <div className="narrow">
     <div className="hdr">
       <button className="iconbtn" onClick={() => nav('/home')} aria-label={t('Home')}><Icon name="chevronLeft" /></button>
-      <div style={{ flex: 1, marginLeft: 10 }}><h1>{t('Settings')}</h1></div>
+      <div style={{ flex: 1, minWidth: 0, marginLeft: 10 }}><h1>{t('Settings')}</h1></div>
     </div>
 
     {/* ---------- account (demo and mobile builds have nothing to sign in to) ---------- */}

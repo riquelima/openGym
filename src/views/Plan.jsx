@@ -24,11 +24,11 @@ export default function Plan() {
 
   return <>
     <div className="hdr">
-      <div>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <h1>{t('Plan')}</h1>
         <div className="sub">{t('Your weekly routine')}</div>
       </div>
-      <div className="row" style={{ gap: 8 }}>
+      <div className="row" style={{ gap: 8, flex: 'none' }}>
         <button className="iconbtn" onClick={planToolsSheet} aria-label={t('Share your plan')} title={t('Share your plan')}>
           <Icon name="upload" />
         </button>

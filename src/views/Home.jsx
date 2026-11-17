@@ -89,7 +89,7 @@ export default function Home() {
   return <div className="narrow">
     {/* Figma Header Greeting */}
     <div className="hdr">
-      <div>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <h1>{user ? t('Hi {0}', user.name) : 'Open Workout'}</h1>
         <div className="sub">{t("It's time to challenge your limits.")}</div>
       </div>
@@ -128,18 +128,18 @@ export default function Home() {
       </div>
       <div className="week">{strip}</div>
       <div className="today-row" onClick={onToday} style={{ marginTop: 10 }}>
-        <div className="row" style={{ gap: 10, minWidth: 0 }}>
-          <span className="lrow-i" style={{ background: S.active ? 'var(--orange)' : routine ? 'var(--acc)' : 'var(--surface-3)', color: (S.active || !routine) ? '#FFFFFF' : 'var(--on-acc)' }}>
+        <div className="row" style={{ gap: 10, minWidth: 0, flex: 1 }}>
+          <span className="lrow-i" style={{ flex: 'none', background: S.active ? 'var(--orange)' : routine ? 'var(--acc)' : 'var(--surface-3)', color: (S.active || !routine) ? '#FFFFFF' : 'var(--on-acc)' }}>
             <Icon name={S.active ? 'timer' : routine ? glyphOf(routine.emoji) : 'moon'} />
           </span>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div className="lbl2" style={{ fontFamily: 'var(--font-athletic)', color: 'var(--label-2)' }}>{t('Today')}</div>
             <div className="ttl" style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>{S.active ? t('{0} — in progress', S.active.name) : routine ? routine.name : t('Rest day')}{todayOvr && routine ? ' · ' + t('rescheduled') : ''}</div>
           </div>
         </div>
-        {S.active ? <span className="tag" style={{ color: 'var(--orange)', background: 'rgba(255,159,10,0.18)' }}>{t('Resume')}</span>
-          : routine ? <span className="tag acc">{t('Start')}</span>
-          : <Icon name="plus" className="chev" />}
+        {S.active ? <span className="tag" style={{ flex: 'none', color: 'var(--orange)', background: 'rgba(255,159,10,0.18)' }}>{t('Resume')}</span>
+          : routine ? <span className="tag acc" style={{ flex: 'none' }}>{t('Start')}</span>
+          : <Icon name="plus" className="chev" style={{ flex: 'none' }} />}
       </div>
     </div>
 

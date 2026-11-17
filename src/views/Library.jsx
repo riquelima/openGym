@@ -173,7 +173,7 @@ export default function Library() {
         <button
           type="button"
           className="btn-icon"
-          style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--label-2)', cursor: 'pointer' }}
+          style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', color: 'var(--label-2)', cursor: 'pointer' }}
           onClick={() => { setQ(''); setShown(40) }}
           aria-label="Limpar busca"
         >

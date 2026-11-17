@@ -268,7 +268,7 @@ export default function Stats() {
   return <>
     {/* Calm Dashboard Header with Live Dot & Range Pill Group */}
     <div className="hdr" style={{ marginBottom: 12 }}>
-      <div>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <h1>{t('Stats')}</h1>
         <div className="sub">{t('Progresso, métricas e histórico de treino')}</div>
       </div>
@@ -407,7 +407,7 @@ export default function Stats() {
               <span className="dash-attention-icon">
                 <Icon name={item.icon} />
               </span>
-              <div>
+              <div className="dash-attention-content">
                 <div className="dash-attention-title">{item.title}</div>
                 <div className="dash-attention-desc">{item.desc}</div>
               </div>
