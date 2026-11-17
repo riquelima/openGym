@@ -16,10 +16,10 @@ export const DEFAULT_GLYPH = 'figureStrength'
 // which say how a workout went, not what it is; nobody names a routine "crown".
 // Grouped, because 20 loose icons is a wall — you scan the group first.
 export const GLYPH_GROUPS = [
-  { key: 'Strength',  items: ['figureStrength', 'arm', 'abs', 'legs', 'pullup'] },
-  { key: 'Equipment', items: ['dumbbell', 'barbell', 'kettlebell', 'plate', 'machine'] },
-  { key: 'Cardio',    items: ['figureRun', 'bike', 'swim', 'boxing', 'timer'] },
-  { key: 'Recovery',  items: ['stretch', 'moon', 'heart', 'flame', 'bolt'] },
+  { key: 'Strength',  items: ['figureStrength', 'arm', 'benchPress', 'squat', 'dumbbellPress', 'pullup', 'abs'] },
+  { key: 'Equipment', items: ['dumbbell', 'barbell', 'kettlebell', 'handGrip', 'plate', 'machine', 'jumpRope'] },
+  { key: 'Cardio',    items: ['figureRun', 'treadmill', 'rowingMachine', 'bike', 'swim', 'boxing', 'timer'] },
+  { key: 'Recovery',  items: ['stretch', 'plank', 'yogaMat', 'moon', 'heart', 'flame', 'bolt'] },
 ]
 export const GLYPHS = GLYPH_GROUPS.flatMap(g => g.items)
 

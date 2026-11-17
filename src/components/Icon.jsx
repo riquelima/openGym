@@ -1,8 +1,9 @@
-// openGym icon set — Powered by Font Awesome Free (Vector SVG paths)
+// openGym icon set — Powered by Activeicons (Sports & Fitness) & Font Awesome (System UI)
 //
 // All icons are high-precision vector glyphs rendered with `fill="currentColor"`,
 // preserving exact scalable metrics across devices with zero external font layout shift.
 import faIcons from './fa-icons.json'
+import activeIcons from './active-icons.json'
 
 // Local glyphs that aren't in the FA bundle. Kept inline so we don't touch
 // the generated fa-icons.json (which is regenerated from upstream).
@@ -12,18 +13,19 @@ const LOCAL_ICONS = {
 }
 
 // Export all available icon names for pickers and validators
-export const ICON_NAMES = [...Object.keys(faIcons), ...Object.keys(LOCAL_ICONS)]
+export const ICON_NAMES = Array.from(new Set([...Object.keys(activeIcons), ...Object.keys(faIcons), ...Object.keys(LOCAL_ICONS)]))
 
 /**
- * <Icon name="flame" />           — inherits font-size via 1em sizing
+ * <Icon name="dumbbell" />        — inherits font-size via 1em sizing
  * <Icon name="flame" size={28} /> — explicit pixel size
  * <Icon name="check" className="custom" />
  */
 export default function Icon({ name, size, className = '', style, ...rest }) {
-  const icon = faIcons[name] || LOCAL_ICONS[name]
+  const icon = (name === 'grip' ? LOCAL_ICONS.grip : null) || activeIcons[name] || faIcons[name] || LOCAL_ICONS[name]
   if (!icon) return null
 
   const s = size ? { width: size, height: size } : null
+  const is24 = icon.vb === '0 0 24 24'
 
   return (
     <svg
@@ -34,7 +36,12 @@ export default function Icon({ name, size, className = '', style, ...rest }) {
       style={s ? { ...s, ...style } : style}
       {...rest}
     >
-      <path fill="currentColor" d={icon.d} />
+      <path
+        fill="currentColor"
+        fillRule={is24 ? 'evenodd' : 'nonzero'}
+        clipRule={is24 ? 'evenodd' : 'nonzero'}
+        d={icon.d}
+      />
     </svg>
   )
 }

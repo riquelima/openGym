@@ -37,20 +37,23 @@ describe('dashboard analytics engine', () => {
   })
 
   it('computes dashboard KPI metrics and attention flags', () => {
+    const now = Date.now()
+    const dIso = daysAgo => new Date(now - daysAgo * 86400000).toISOString().slice(0, 10)
+
     const mockState = {
       workouts: [
         {
-          d: '2026-10-10',
+          d: dIso(25),
           entries: [{ id: 'bench-press', sets: [{ w: 80, r: 10, done: true }] }]
         },
         {
-          d: '2026-10-25',
+          d: dIso(5),
           entries: [{ id: 'bench-press', sets: [{ w: 80, r: 10, done: true }] }]
         }
       ],
       bodyweight: [
-        { d: '2026-09-20', w: 80 },
-        { d: '2026-10-25', w: 79.2 }
+        { d: dIso(30), w: 80 },
+        { d: dIso(2), w: 79.2 }
       ],
       targetW: 76,
       unit: 'kg',
