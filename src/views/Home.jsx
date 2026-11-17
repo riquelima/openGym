@@ -98,29 +98,6 @@ export default function Home() {
       </button>
     </div>
 
-    {/* Figma Frame 16: Category Quick Nav */}
-    <div className="cat-nav">
-      <button className={"cat-nav-item" + (S.active || routine ? " active" : "")} onClick={onToday}>
-        <span className="cat-icon"><Icon name="dumbbell" /></span>
-        <span className="cat-label">{t('Workout')}</span>
-      </button>
-      <div className="cat-nav-divider" />
-      <button className="cat-nav-item" onClick={() => nav('/stats')}>
-        <span className="cat-icon"><Icon name="chart" /></span>
-        <span className="cat-label">{t('Progress')}</span>
-      </button>
-      <div className="cat-nav-divider" />
-      <button className="cat-nav-item" onClick={() => nav('/library')}>
-        <span className="cat-icon"><Icon name="list" /></span>
-        <span className="cat-label">{t('Exercises')}</span>
-      </button>
-      <div className="cat-nav-divider" />
-      <button className="cat-nav-item" onClick={() => nav('/plan')}>
-        <span className="cat-icon"><Icon name="calendar" /></span>
-        <span className="cat-label">{t('Routines')}</span>
-      </button>
-    </div>
-
     {/* Figma Group 14: Weekly Challenge Banner */}
     <div className="challenge-banner" onClick={() => calendarSheet()}>
       <div className="row between" style={{ alignItems: 'flex-start' }}>
